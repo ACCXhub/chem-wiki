@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:run
+      - run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+psycopg://chem_wiki:chem_wiki_ci@localhost:5432/chem_wiki
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: chem_wiki
+          POSTGRES_USER: chem_wiki
+          POSTGRES_PASSWORD: chem_wiki_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U chem_wiki -d chem_wiki"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.5"
+          python-version: "3.13"
+          enable-cache: true
+          working-directory: backend
+      - run: uv sync --locked --dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run alembic upgrade head
+      - run: uv run pytest -q
