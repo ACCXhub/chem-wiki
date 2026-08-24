@@ -1,2 +1,2 @@
 export { default } from './PeriodicTable'
-export type { PeriodicTableElement } from './types'
+export type { ElementCategory, PeriodicTableElement } from './types'

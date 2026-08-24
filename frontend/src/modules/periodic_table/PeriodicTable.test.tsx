@@ -67,6 +67,9 @@ test('click selects an element while hover provides a temporary preview', async 
   fireEvent.mouseLeave(screen.getByRole('button', { name: '8 氧 O' }))
   expect(screen.getByRole('heading', { name: '氦 He' })).toBeInTheDocument()
   expect(screen.getByText('正式元素')).toBeInTheDocument()
+  expect(
+    screen.getByText('选择元素后可通过稳定元素 ID 打开 Element Wiki。'),
+  ).toBeInTheDocument()
 })
 
 

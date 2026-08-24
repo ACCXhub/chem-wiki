@@ -18,6 +18,10 @@ interface PeriodicTableViewProps {
   onElementSelect?: (elementId: string) => void
 }
 
+interface PeriodicTableProps {
+  onElementSelect?: (elementId: string) => void
+}
+
 const CATEGORY_LABELS: Record<ElementCategory, string> = {
   'alkali-metal': '碱金属',
   'alkaline-earth-metal': '碱土金属',
@@ -282,7 +286,7 @@ export function PeriodicTableView({
               </article>
             </div>
             <p className="wiki-extension">
-              已选择此元素。Element Wiki 内容将在 M04 通过当前元素 ID 接入。
+              选择元素后可通过稳定元素 ID 打开 Element Wiki。
             </p>
           </aside>
         ) : null}
@@ -291,7 +295,7 @@ export function PeriodicTableView({
   )
 }
 
-export default function PeriodicTable() {
+export default function PeriodicTable({ onElementSelect }: PeriodicTableProps) {
   const [elements, setElements] = useState<PeriodicTableElement[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -329,7 +333,7 @@ export default function PeriodicTable() {
   }
   return (
     <main>
-      <PeriodicTableView elements={elements} />
+      <PeriodicTableView elements={elements} onElementSelect={onElementSelect} />
     </main>
   )
 }
