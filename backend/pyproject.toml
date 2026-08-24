@@ -22,7 +22,10 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-markers = ["integration: requires PostgreSQL"]
+markers = [
+    "integration: requires PostgreSQL",
+    "live: requires explicit opt-in and access to an external service",
+]
 
 [tool.ruff]
 target-version = "py313"
