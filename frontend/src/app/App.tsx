@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import ElementWiki from '../modules/element_wiki'
+import EquationLab from '../modules/equation_lab'
 import PeriodicTable from '../modules/periodic_table'
 
 
@@ -24,10 +25,20 @@ function App() {
   }, [])
 
   const elementId = elementIdFromPath(pathname)
+  if (pathname === '/equation-lab') {
+    return <EquationLab onBack={() => navigate('/')} />
+  }
   if (elementId) {
     return <ElementWiki elementId={elementId} onBack={() => navigate('/')} />
   }
-  return <PeriodicTable onElementSelect={(id) => navigate(`/elements/${id}`)} />
+  return (
+    <>
+      <button className="equation-lab-entry" type="button" onClick={() => navigate('/equation-lab')}>
+        方程实验室
+      </button>
+      <PeriodicTable onElementSelect={(id) => navigate(`/elements/${id}`)} />
+    </>
+  )
 }
 
 export default App

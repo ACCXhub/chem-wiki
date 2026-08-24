@@ -3,8 +3,9 @@ from alembic import context
 from chem_wiki.config import Settings
 from chem_wiki.infrastructure.database import create_database_engine
 from chem_wiki.modules.element_data import ElementDataBase
+from chem_wiki.modules.reaction_core import ReactionCoreBase
 
-target_metadata = ElementDataBase.metadata
+target_metadata = [ElementDataBase.metadata, ReactionCoreBase.metadata]
 
 
 def run_migrations_offline() -> None:

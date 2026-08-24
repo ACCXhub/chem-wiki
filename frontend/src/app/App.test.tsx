@@ -84,3 +84,14 @@ test('selecting an M03 element navigates to its M04 Wiki UUID route', async () =
   expect(window.location.pathname).toBe(`/elements/${elementId}`)
   expect(await screen.findByRole('heading', { level: 1, name: '氯' })).toBeInTheDocument()
 })
+
+
+test('opens the M05 Equation Lab from the main application route', async () => {
+  window.history.replaceState(null, '', '/equation-lab')
+  const { default: App } = await import('./App')
+
+  render(<App />)
+
+  expect(screen.getByRole('heading', { level: 1, name: '方程实验室' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '配平并验证' })).toBeInTheDocument()
+})
