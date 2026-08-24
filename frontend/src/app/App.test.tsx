@@ -95,3 +95,16 @@ test('opens the M05 Equation Lab from the main application route', async () => {
   expect(screen.getByRole('heading', { level: 1, name: '方程实验室' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: '配平并验证' })).toBeInTheDocument()
 })
+
+
+test('opens the lazy M06 Structure Lab route', async () => {
+  window.history.replaceState(null, '', '/structure-lab')
+  vi.doMock('../modules/structure_lab', () => ({
+    default: () => <h1>结构实验室</h1>,
+  }))
+  const { default: App } = await import('./App')
+
+  render(<App />)
+
+  expect(await screen.findByRole('heading', { level: 1, name: '结构实验室' })).toBeInTheDocument()
+})

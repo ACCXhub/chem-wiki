@@ -1,0 +1,53 @@
+.lab-entry-cluster {
+  position: fixed;
+  z-index: 20;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  gap: .5rem;
+  padding: .35rem;
+  border: 1px solid rgba(160, 207, 190, .18);
+  border-radius: 99px;
+  background: rgba(7, 19, 16, .9);
+  box-shadow: 0 .8rem 2rem rgba(0, 0, 0, .3);
+  backdrop-filter: blur(12px);
+}
+
+.lab-entry-cluster .equation-lab-entry,
+.lab-entry-cluster .structure-lab-entry {
+  position: static;
+  padding: .7rem .9rem;
+  border: 1px solid #42685b;
+  border-radius: 99px;
+  color: #bcd1ca;
+  background: #10251f;
+  box-shadow: none;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.lab-entry-cluster .structure-lab-entry {
+  border-color: #d2a65b;
+  color: #17130b;
+  background: #e7bd70;
+}
+
+.app-route-loading {
+  display: grid;
+  min-height: 100vh;
+  place-content: center;
+  color: #96aaa3;
+}
+
+@media (max-width: 520px) {
+  .lab-entry-cluster {
+    right: .65rem;
+    bottom: .65rem;
+    left: .65rem;
+    justify-content: center;
+  }
+
+  .lab-entry-cluster button {
+    flex: 1;
+  }
+}
