@@ -1,0 +1,177 @@
+"""PostgreSQL catalog query adapter for the bounded consolidated dataset."""
+
+import unicodedata
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from .persistence import (
+    CatalogReactionParticipantRow,
+    CatalogReactionRow,
+    CatalogSpeciesRow,
+    CatalogTeachingProjectionRow,
+)
+from .read_model import (
+    CatalogReactionParticipantResult,
+    CatalogReactionResult,
+    CatalogSpeciesResult,
+)
+
+EQUATION_MODES = {"molecular", "ionic", "net_ionic"}
+SUITABILITY_RANK = {"recommended": 0, "available": 1, "deemphasized": 2}
+
+
+def _normalize(value: str) -> str:
+    return unicodedata.normalize("NFKC", value).casefold().strip()
+
+
+def _match_rank(
+    species: CatalogSpeciesRow,
+    projection: CatalogTeachingProjectionRow,
+    query: str,
+) -> int | None:
+    if not query:
+        return 0
+    name_zh = _normalize(species.name_zh)
+    name_en = _normalize(species.name_en or "")
+    formula = _normalize(species.formula)
+    aliases = [_normalize(value) for value in species.aliases]
+    tokens = [_normalize(value) for value in projection.search_tokens]
+    if query == name_zh:
+        return 0
+    if query in aliases:
+        return 1
+    if query == name_en:
+        return 2
+    if query == formula:
+        return 3
+    if query in tokens:
+        return 4
+    searchable = [name_zh, name_en, formula, *aliases, *tokens]
+    if any(value.startswith(query) for value in searchable):
+        return 5
+    if any(query in value for value in searchable):
+        return 6
+    return None
+
+
+def _equation_suitability(projection: CatalogTeachingProjectionRow, mode: str) -> str:
+    return {
+        "molecular": projection.molecular_suitability,
+        "ionic": projection.ionic_suitability,
+        "net_ionic": projection.net_ionic_suitability,
+    }[mode]
+
+
+class PostgresCatalogReader:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def search_species(
+        self,
+        *,
+        query: str = "",
+        primary_category: str | None = None,
+        equation_mode: str | None = None,
+        limit: int = 20,
+    ) -> list[CatalogSpeciesResult]:
+        if not 1 <= limit <= 50:
+            raise ValueError("catalog result limit 必须在 1 到 50 之间")
+        if equation_mode is not None and equation_mode not in EQUATION_MODES:
+            raise ValueError("不支持的 equation mode")
+
+        statement = select(CatalogSpeciesRow, CatalogTeachingProjectionRow).join(
+            CatalogTeachingProjectionRow,
+            CatalogTeachingProjectionRow.species_id == CatalogSpeciesRow.consolidated_id,
+        )
+        if primary_category is not None:
+            statement = statement.where(
+                CatalogTeachingProjectionRow.primary_category == primary_category
+            )
+        normalized_query = _normalize(query)
+        ranked: list[
+            tuple[int, int, int, str, CatalogSpeciesRow, CatalogTeachingProjectionRow]
+        ] = []
+        for species, projection in self._session.execute(statement):
+            match_rank = _match_rank(species, projection, normalized_query)
+            if match_rank is None:
+                continue
+            suitability_rank = (
+                SUITABILITY_RANK[_equation_suitability(projection, equation_mode)]
+                if equation_mode
+                else 0
+            )
+            ranked.append(
+                (
+                    suitability_rank,
+                    match_rank,
+                    projection.default_palette_rank,
+                    species.consolidated_id,
+                    species,
+                    projection,
+                )
+            )
+        ranked.sort(key=lambda item: item[:4])
+        return [
+            CatalogSpeciesResult(
+                consolidated_id=species.consolidated_id,
+                application_id=species.application_id,
+                entity_kind=species.entity_kind,
+                name_zh=species.name_zh,
+                name_en=species.name_en,
+                formula=species.formula,
+                charge=species.charge,
+                aliases=species.aliases,
+                primary_category=projection.primary_category,
+                tags=projection.tags,
+                default_priority=projection.default_priority,
+                default_palette_rank=projection.default_palette_rank,
+                equation_modes={
+                    "molecular": projection.molecular_suitability,
+                    "ionic": projection.ionic_suitability,
+                    "net_ionic": projection.net_ionic_suitability,
+                },
+            )
+            for _, _, _, _, species, projection in ranked[:limit]
+        ]
+
+    def get_reaction(self, consolidated_id: str) -> CatalogReactionResult | None:
+        row = self._session.get(CatalogReactionRow, consolidated_id)
+        if row is None:
+            return None
+        participant_rows = self._session.scalars(
+            select(CatalogReactionParticipantRow)
+            .where(CatalogReactionParticipantRow.reaction_id == consolidated_id)
+            .order_by(CatalogReactionParticipantRow.ordinal)
+        ).all()
+        source_participants = list(row.original_payload["participants"])
+        participants = [
+            CatalogReactionParticipantResult(
+                role=participant_row.role,
+                coefficient=source_participants[participant_row.ordinal]["coefficient"],
+                species_id=participant_row.species_id,
+                application_target_id=participant_row.application_target_id,
+                target_type=participant_row.target_type,
+                non_species_ref=participant_row.non_species_ref,
+                source_species_ref=participant_row.source_species_ref,
+                formula_literal=participant_row.formula_literal,
+                phase=participant_row.phase,
+            )
+            for participant_row in participant_rows
+        ]
+        return CatalogReactionResult(
+            consolidated_id=row.consolidated_id,
+            application_reaction_id=row.application_reaction_id,
+            source_package=row.source_package,
+            source_id=row.source_id,
+            name_zh=row.name_zh,
+            materialization_state=row.materialization_state,
+            not_materialized_reasons=row.not_materialized_reasons,
+            participants=participants,
+            reaction_types=list(row.original_payload["reaction_types"]),
+            conditions=list(row.original_payload["conditions"]),
+            equation=row.original_payload.get("equation"),
+            equation_status=row.original_payload.get("equation_status"),
+            reversible=row.original_payload.get("reversible"),
+            provenance_refs=list(row.original_payload["provenance_refs"]),
+        )
