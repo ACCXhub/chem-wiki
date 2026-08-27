@@ -96,14 +96,11 @@ input:focus-visible,
 }
 
 .periodic-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 23rem);
-  gap: 1rem;
-  align-items: start;
+  min-width: 0;
 }
 
 .periodic-main,
-.element-inspector {
+.floating-element-inspector {
   border: 1px solid rgba(160, 207, 190, 0.14);
   border-radius: 1.2rem;
   background: rgba(11, 27, 23, 0.82);
@@ -197,11 +194,44 @@ input:focus-visible,
 }
 
 .periodic-grid {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(18, minmax(3.35rem, 1fr));
-  grid-template-rows: repeat(9, minmax(4.4rem, auto));
+  grid-template-columns: 1.25rem repeat(18, minmax(3.35rem, 1fr));
+  grid-template-rows: 1.25rem repeat(9, minmax(4.4rem, auto));
   gap: 0.32rem;
-  min-width: 70rem;
+  min-width: 73rem;
+}
+
+.group-label,
+.period-label {
+  z-index: 2;
+  align-self: center;
+  color: #789087;
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.period-label {
+  color: #9db1aa;
+  font-weight: 800;
+}
+
+.metal-nonmetal-boundary {
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.metal-nonmetal-boundary path {
+  fill: none;
+  stroke: rgba(241, 208, 135, 0.9);
+  stroke-linecap: square;
+  stroke-width: 0.075;
 }
 
 .element-cell {
@@ -219,6 +249,7 @@ input:focus-visible,
     linear-gradient(145deg, color-mix(in srgb, var(--category-color) 22%, #10241e), #0d1d19);
   text-align: left;
   cursor: pointer;
+  z-index: 2;
   transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
@@ -340,10 +371,14 @@ input:focus-visible,
   font-weight: 600;
 }
 
-.element-inspector {
-  position: sticky;
-  top: 1rem;
-  padding: 1.2rem;
+.floating-element-inspector {
+  position: fixed;
+  z-index: 30;
+  width: 18rem;
+  max-width: calc(100vw - 1.5rem);
+  padding: 0.85rem;
+  pointer-events: none;
+  transition: left 90ms ease-out, top 90ms ease-out;
 }
 
 .inspector-heading {
@@ -351,7 +386,7 @@ input:focus-visible,
   grid-template-columns: auto 1fr auto;
   gap: 0.75rem;
   align-items: center;
-  padding-bottom: 1rem;
+  padding-bottom: 0.7rem;
   border-bottom: 1px solid rgba(160, 207, 190, 0.12);
 }
 
@@ -376,7 +411,7 @@ input:focus-visible,
 .inspector-heading h2 {
   margin-top: 0.18rem;
   font-family: Georgia, "Noto Serif SC", serif;
-  font-size: 1.65rem;
+  font-size: 1.3rem;
   font-weight: 500;
 }
 
@@ -393,11 +428,11 @@ input:focus-visible,
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.6rem;
-  margin: 1rem 0;
+  margin: 0.7rem 0;
 }
 
 .element-facts div {
-  padding: 0.7rem;
+  padding: 0.55rem;
   border-radius: 0.65rem;
   background: #0b1d18;
 }
@@ -423,7 +458,7 @@ input:focus-visible,
   display: grid;
   gap: 0.22rem;
   min-width: 0;
-  padding: 0.85rem;
+  padding: 0.6rem;
   border: 1px solid rgba(160, 207, 190, 0.12);
   border-radius: 0.75rem;
 }
@@ -444,8 +479,8 @@ input:focus-visible,
 }
 
 .wiki-extension {
-  margin: 1rem 0 0;
-  padding: 0.8rem;
+  margin: 0.7rem 0 0;
+  padding: 0.6rem;
   border-left: 2px solid #3e7765;
   color: #839991;
   background: rgba(34, 72, 60, 0.2);
@@ -463,16 +498,6 @@ input:focus-visible,
 
 .periodic-state p {
   color: #96aaa3;
-}
-
-@media (max-width: 1100px) {
-  .periodic-workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .element-inspector {
-    position: static;
-  }
 }
 
 @media (max-width: 680px) {
@@ -503,10 +528,11 @@ input:focus-visible,
     width: 100%;
   }
 
-  .element-facts,
-  .property-cards {
-    grid-template-columns: 1fr 1fr;
-  }
+  .floating-element-inspector { display: none; }
+}
+
+@media (hover: none) {
+  .floating-element-inspector { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

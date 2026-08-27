@@ -41,6 +41,13 @@ const MODES: readonly { id: DisplayMode; label: string }[] = [
   { id: 'firstIonizationEnergy', label: '第一电离能' },
 ]
 
+const GROUPS = Array.from({ length: 18 }, (_, index) => index + 1)
+const PERIODS = Array.from({ length: 7 }, (_, index) => index + 1)
+const INSPECTOR_WIDTH = 288
+const INSPECTOR_HEIGHT = 410
+const INSPECTOR_GUTTER = 12
+const INSPECTOR_OFFSET = 16
+
 function propertyFor(element: PeriodicTableElement, mode: DisplayMode) {
   if (mode === 'electronegativity') {
     return element.properties.electronegativity
@@ -63,15 +70,14 @@ export function PeriodicTableView({
   const [selectedId, setSelectedId] = useState<string | null>(
     elements[0]?.id ?? null,
   )
-  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [inspector, setInspector] = useState<{
+    element: PeriodicTableElement
+    left: number
+    top: number
+  } | null>(null)
   const [query, setQuery] = useState('')
   const [searchMessage, setSearchMessage] = useState('')
   const buttonRefs = useRef(new Map<string, HTMLButtonElement>())
-
-  const selectedElement =
-    elements.find((element) => element.id === selectedId) ?? elements[0]
-  const previewElement =
-    elements.find((element) => element.id === hoveredId) ?? selectedElement
 
   const heatExtent = useMemo(() => {
     if (mode === 'category') return null
@@ -87,6 +93,27 @@ export function PeriodicTableView({
     setSelectedId(element.id)
     setSearchMessage('')
     onElementSelect?.(element.id)
+  }
+
+  function showInspector(element: PeriodicTableElement, clientX: number, clientY: number) {
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const right = clientX + INSPECTOR_OFFSET
+    const left = clientX - INSPECTOR_WIDTH - INSPECTOR_OFFSET
+    const preferredLeft = right + INSPECTOR_WIDTH <= viewportWidth - INSPECTOR_GUTTER ? right : left
+    setInspector({
+      element,
+      left: Math.max(INSPECTOR_GUTTER, Math.min(preferredLeft, viewportWidth - INSPECTOR_WIDTH - INSPECTOR_GUTTER)),
+      top: Math.max(INSPECTOR_GUTTER, Math.min(clientY + INSPECTOR_OFFSET, viewportHeight - INSPECTOR_HEIGHT - INSPECTOR_GUTTER)),
+    })
+  }
+
+  function showInspectorForFocus(
+    element: PeriodicTableElement,
+    target: HTMLButtonElement,
+  ) {
+    const rect = target.getBoundingClientRect()
+    showInspector(element, rect.right, rect.top + rect.height / 2)
   }
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -163,6 +190,35 @@ export function PeriodicTableView({
 
           <div className="table-scroll" tabIndex={0} aria-label="可横向滚动的周期表">
             <div className="periodic-grid">
+              {GROUPS.map((group) => (
+                <span
+                  key={group}
+                  className="group-label"
+                  data-testid={`group-label-${group}`}
+                  style={{ gridColumn: group + 1, gridRow: 1 }}
+                >
+                  {group}
+                </span>
+              ))}
+              {PERIODS.map((period) => (
+                <span
+                  key={period}
+                  className="period-label"
+                  data-testid={`period-label-${period}`}
+                  style={{ gridColumn: 1, gridRow: period + 1 }}
+                >
+                  {period}
+                </span>
+              ))}
+              <svg
+                className="metal-nonmetal-boundary"
+                data-testid="metal-nonmetal-boundary"
+                viewBox="0 0 19 10"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                <path d="M14 2 L14 3 L15 3 L15 4 L16 4 L16 5 L17 5 L17 6" />
+              </svg>
               {elements.map((element) => {
                 const property = propertyFor(element, mode)
                 const value = property?.value ?? null
@@ -172,8 +228,8 @@ export function PeriodicTableView({
                     ? null
                     : (value - range.min) / (range.max - range.min || 1)
                 const style = {
-                  gridColumn: element.layout.column,
-                  gridRow: element.layout.row,
+                  gridColumn: element.layout.column + 1,
+                  gridRow: element.layout.row + 1,
                   '--heat': heat ?? 0,
                 } as CSSProperties
                 return (
@@ -192,10 +248,11 @@ export function PeriodicTableView({
                     aria-pressed={element.id === selectedId}
                     data-element-id={element.id}
                     onClick={() => selectElement(element)}
-                    onMouseEnter={() => setHoveredId(element.id)}
-                    onMouseLeave={() => setHoveredId(null)}
-                    onFocus={() => setHoveredId(element.id)}
-                    onBlur={() => setHoveredId(null)}
+                    onPointerEnter={(event) => showInspector(element, event.clientX, event.clientY)}
+                    onPointerMove={(event) => showInspector(element, event.clientX, event.clientY)}
+                    onPointerLeave={() => setInspector(null)}
+                    onFocus={(event) => showInspectorForFocus(element, event.currentTarget)}
+                    onBlur={() => setInspector(null)}
                   >
                     <span className="atomic-number">{element.atomicNumber}</span>
                     <strong className="element-symbol">{element.symbol}</strong>
@@ -233,60 +290,65 @@ export function PeriodicTableView({
           </div>
         </div>
 
-        {previewElement ? (
-          <aside className="element-inspector" aria-live="polite">
+        {inspector ? (
+          <aside
+            className="floating-element-inspector"
+            role="tooltip"
+            aria-live="polite"
+            style={{ left: inspector.left, top: inspector.top }}
+          >
             <div className="inspector-heading">
-              <span className={`inspector-mark category-${previewElement.category}`} />
+              <span className={`inspector-mark category-${inspector.element.category}`} />
               <div>
-                <p>{previewElement.nameEn}</p>
-                <h2>{`${previewElement.nameZh} ${previewElement.symbol}`}</h2>
+                <p>{inspector.element.nameEn}</p>
+                <h2>{`${inspector.element.nameZh} ${inspector.element.symbol}`}</h2>
               </div>
               <span className="status-badge">
-                {previewElement.status === 'confirmed' ? '正式元素' : '预测元素'}
+                {inspector.element.status === 'confirmed' ? '正式元素' : '预测元素'}
               </span>
             </div>
             <dl className="element-facts">
               <div>
                 <dt>原子序数</dt>
-                <dd>{previewElement.atomicNumber}</dd>
+                <dd>{inspector.element.atomicNumber}</dd>
               </div>
               <div>
                 <dt>周期 / 族</dt>
                 <dd>
-                  {previewElement.layout.period} / {previewElement.layout.group ?? '镧锕系'}
+                  {inspector.element.layout.period} / {inspector.element.layout.group ?? '镧锕系'}
                 </dd>
               </div>
               <div>
                 <dt>元素类别</dt>
-                <dd>{CATEGORY_LABELS[previewElement.category]}</dd>
+                <dd>{CATEGORY_LABELS[inspector.element.category]}</dd>
               </div>
               <div>
                 <dt>电子区块</dt>
-                <dd>{previewElement.layout.block.toUpperCase()} 区</dd>
+                <dd>{inspector.element.layout.block.toUpperCase()} 区</dd>
               </div>
             </dl>
             <div className="property-cards">
               <article>
                 <span>电负性</span>
                 <strong>
-                  {formatValue(previewElement.properties.electronegativity.value)}
+                  {formatValue(inspector.element.properties.electronegativity.value)}
                 </strong>
-                <small>{previewElement.properties.electronegativity.unit ?? '—'}</small>
+                <small>{inspector.element.properties.electronegativity.unit ?? '—'}</small>
               </article>
               <article>
                 <span>第一电离能</span>
                 <strong>
                   {formatValue(
-                    previewElement.properties.firstIonizationEnergy.value,
+                    inspector.element.properties.firstIonizationEnergy.value,
                   )}
                 </strong>
                 <small>
-                  {previewElement.properties.firstIonizationEnergy.unit ?? '—'}
+                  {inspector.element.properties.firstIonizationEnergy.unit ?? '—'}
                 </small>
               </article>
             </div>
             <p className="wiki-extension">
-              选择元素后可通过稳定元素 ID 打开 Element Wiki。
+              点击或按 Enter 可通过稳定元素 ID 打开 Element Wiki。
             </p>
           </aside>
         ) : null}

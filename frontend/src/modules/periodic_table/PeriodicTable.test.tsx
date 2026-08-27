@@ -47,7 +47,7 @@ const elements = [
 ] as const
 
 
-test('click selects an element while hover provides a temporary preview', async () => {
+test('hover and keyboard focus expose a floating element inspector without a permanent panel', async () => {
   const { PeriodicTableView } = await import('./PeriodicTable')
   const onElementSelect = vi.fn()
   render(
@@ -57,19 +57,32 @@ test('click selects an element while hover provides a temporary preview', async 
     />,
   )
 
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+  const oxygen = screen.getByRole('button', { name: '8 氧 O' })
+  fireEvent.pointerEnter(oxygen, { clientX: 40, clientY: 40 })
+  fireEvent.pointerMove(oxygen, { clientX: 40, clientY: 40 })
+  expect(screen.getByRole('tooltip')).toHaveTextContent('氧 O')
+  expect(screen.getByRole('tooltip')).toHaveStyle({ left: '56px', top: '56px' })
+
+  fireEvent.pointerLeave(oxygen)
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+  fireEvent.focus(oxygen)
+  expect(screen.getByRole('tooltip')).toHaveTextContent('氧 O')
   fireEvent.click(screen.getByRole('button', { name: '2 氦 He' }))
-  expect(screen.getByRole('heading', { name: '氦 He' })).toBeInTheDocument()
   expect(onElementSelect).toHaveBeenCalledWith('he-id')
+})
 
-  fireEvent.mouseEnter(screen.getByRole('button', { name: '8 氧 O' }))
-  expect(screen.getByRole('heading', { name: '氧 O' })).toBeInTheDocument()
+test('renders period and group coordinates plus the metal nonmetal staircase', async () => {
+  const { PeriodicTableView } = await import('./PeriodicTable')
+  render(<PeriodicTableView elements={[...elements]} />)
 
-  fireEvent.mouseLeave(screen.getByRole('button', { name: '8 氧 O' }))
-  expect(screen.getByRole('heading', { name: '氦 He' })).toBeInTheDocument()
-  expect(screen.getByText('正式元素')).toBeInTheDocument()
-  expect(
-    screen.getByText('选择元素后可通过稳定元素 ID 打开 Element Wiki。'),
-  ).toBeInTheDocument()
+  expect(screen.getByTestId('period-label-1')).toHaveTextContent('1')
+  expect(screen.getByTestId('period-label-7')).toHaveTextContent('7')
+  expect(screen.getByTestId('group-label-1')).toHaveTextContent('1')
+  expect(screen.getByTestId('group-label-18')).toHaveTextContent('18')
+  expect(screen.getByTestId('metal-nonmetal-boundary')).toBeInTheDocument()
 })
 
 
