@@ -48,15 +48,21 @@ jobs:
               raw_bytes = response.read()
           payload = json.loads(raw_bytes)
 
-          elements = payload.get("elements")
-          if not isinstance(elements, list) or len(elements) != 118:
-              raise SystemExit(
-                  f"Expected 118 reference elements, got {len(elements) if isinstance(elements, list) else 'invalid'}"
-              )
+          source_elements = payload.get("elements")
+          if not isinstance(source_elements, list):
+              raise SystemExit("Reference dataset has no elements array")
 
-          numbers = [item.get("number") for item in elements if isinstance(item, dict)]
+          elements = [
+              item
+              for item in source_elements
+              if isinstance(item, dict)
+              and isinstance(item.get("number"), int)
+              and 1 <= item["number"] <= 118
+          ]
+          elements.sort(key=lambda item: item["number"])
+          numbers = [item["number"] for item in elements]
           if numbers != list(range(1, 119)):
-              raise SystemExit("Reference dataset is not the canonical atomic-number range 1..118")
+              raise SystemExit("Reference dataset does not contain each canonical atomic number 1..118 exactly once")
 
           output_dir = Path("backend/src/chem_wiki/modules/element_data/seeds")
           output_dir.mkdir(parents=True, exist_ok=True)
@@ -68,8 +74,6 @@ jobs:
           media_records: list[dict[str, object]] = []
 
           for element in elements:
-              if not isinstance(element, dict):
-                  raise SystemExit("Reference element entry must be an object")
               atomic_number = element["number"]
               symbol = element["symbol"]
               phase = element.get("phase")
@@ -165,7 +169,8 @@ jobs:
               "source_url": SOURCE_URL,
               "source_page": SOURCE_PAGE,
               "retrieved_at": retrieved_at,
-              "record_count": 118,
+              "source_record_count": len(source_elements),
+              "selected_record_count": 118,
               "atomic_number_range": [1, 118],
               "source_content_sha256": hashlib.sha256(raw_bytes).hexdigest(),
               "outputs": {
@@ -190,6 +195,7 @@ jobs:
                   "role": "licensed external detail/media reference; not a second Element identity source",
               },
               "normalization_notes": [
+                  "The upstream dataset currently contains a non-canonical extra record; application reference output is explicitly limited to atomic numbers 1..118.",
                   "Wikipedia summary prose is intentionally excluded.",
                   "Only structured element facts, source-page links and media metadata are retained.",
                   "Reference values are not application-published M02 claims until they pass the existing field publication policy.",
