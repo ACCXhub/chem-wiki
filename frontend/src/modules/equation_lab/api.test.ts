@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest'
 
-import { balanceEquation } from './api'
+import { balanceEquation, searchCatalogSpecies } from './api'
 
 
 afterEach(() => vi.unstubAllGlobals())
@@ -35,5 +35,25 @@ test('surfaces the Chinese domain error from an invalid equation', async () => {
 
   await expect(balanceEquation('H2 -> H2O', 'molecular')).rejects.toThrow(
     '方程式没有非零守恒解',
+  )
+})
+
+test('queries the catalog with combined search, category and equation mode filters', async () => {
+  const payload = [{ consolidatedId: 'species:inorganic:ion:sulfate', formula: 'SO4' }]
+  const fetchMock = vi.fn(() =>
+    Promise.resolve({ ok: true, json: () => Promise.resolve(payload) }),
+  )
+  vi.stubGlobal('fetch', fetchMock)
+
+  await expect(searchCatalogSpecies({
+    query: 'sulfate',
+    primaryCategory: 'anion',
+    equationMode: 'ionic',
+    limit: 50,
+  })).resolves.toBe(payload)
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/v1/catalog/species?equation_mode=ionic&limit=50&q=sulfate&primary_category=anion',
+    { headers: { Accept: 'application/json' }, signal: undefined },
   )
 })

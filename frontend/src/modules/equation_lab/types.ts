@@ -1,5 +1,42 @@
 export type EquationMode = 'molecular' | 'ionic' | 'net_ionic'
 
+export type EquationPhase = 'aq' | 's' | 'l' | 'g'
+
+export type EquationSuitability = 'recommended' | 'available' | 'deemphasized'
+
+export interface CatalogSpecies {
+  consolidatedId: string
+  applicationId: string
+  entityKind: 'ion' | 'substance'
+  nameZh: string
+  nameEn: string | null
+  formula: string
+  charge: number
+  aliases: string[]
+  primaryCategory: string
+  tags: string[]
+  defaultPriority: string
+  defaultPaletteRank: number
+  equationModes: Record<EquationMode, EquationSuitability>
+}
+
+export interface EquationDraftParticipant extends CatalogSpecies {
+  phase: EquationPhase | null
+}
+
+export interface EquationDraft {
+  mode: EquationMode
+  reactants: EquationDraftParticipant[]
+  products: EquationDraftParticipant[]
+}
+
+export interface CatalogSpeciesQuery {
+  query?: string
+  primaryCategory?: string
+  equationMode: EquationMode
+  limit?: number
+}
+
 export interface EquationTerm {
   formula: string
   coefficient: number
