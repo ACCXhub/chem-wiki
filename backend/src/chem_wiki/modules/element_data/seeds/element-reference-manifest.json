@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0.0",
+  "canonical_owner": "chem-wiki M02 element_data",
+  "identity": {
+    "authority": "M02 Element identity / IUPAC seed",
+    "seed": "iupac-periodic-table-2022-05-04.json",
+    "join_key": ["atomic_number", "symbol"]
+  },
+  "application_publication": {
+    "rule": "Application-visible canonical scalar values remain the existing M02 ElementClaim -> ElementPublishedValue publication result.",
+    "reference_snapshots_do_not_override_published_values": true
+  },
+  "reference_layers": [
+    {
+      "id": "pubchem-periodic-table",
+      "path": "pubchem-periodic-table.json",
+      "metadata": "pubchem-periodic-table.meta.json",
+      "role": "structured external reference for periodic element properties",
+      "coverage": "118 elements",
+      "fields": [
+        "atomic mass",
+        "CPK display color",
+        "electron configuration",
+        "Pauling electronegativity",
+        "van der Waals atomic radius",
+        "first ionization energy",
+        "electron affinity",
+        "oxidation states",
+        "standard state",
+        "melting point",
+        "boiling point",
+        "density",
+        "group/family",
+        "year discovered"
+      ],
+      "consumer_policy": "Use as provenance-preserving source input/candidate facts; publish scalar values through the existing M02 claim policy."
+    },
+    {
+      "id": "licensed-element-detail-reference",
+      "path": "element-detail-reference.jsonl",
+      "metadata": "element-detail-reference.meta.json",
+      "role": "extended structured detail reference where current M02 scalar schema does not yet expose the field",
+      "coverage": "118 elements",
+      "license": "CC BY-SA 3.0",
+      "consumer_policy": "Derived reference content retains source attribution; Wikipedia summary prose is excluded."
+    },
+    {
+      "id": "wikidata-commons-media",
+      "path": "element-wikimedia-media.jsonl",
+      "metadata": "element-wikimedia-media.meta.json",
+      "role": "preferred element sample-image metadata source",
+      "coverage": "118 element identities; image availability recorded per row",
+      "consumer_policy": "Prefer only records with explicit Commons per-file license metadata; render attribution when required. Identity is anchored to the local IUPAC atomic-number + symbol pair."
+    },
+    {
+      "id": "licensed-media-fallback",
+      "path": "element-media-reference.jsonl",
+      "metadata": "element-detail-reference.meta.json",
+      "role": "fallback sample image plus Bohr-model, 3D-model and spectral-media references",
+      "coverage": "118 elements",
+      "license": "dataset CC BY-SA 3.0; sample images retain per-record attribution",
+      "consumer_policy": "Use as fallback/educational media reference; preserve supplied attribution and do not copy remote binaries into canonical element identity data."
+    },
+    {
+      "id": "element-teaching-relations",
+      "path": "element-teaching-relations.jsonl",
+      "metadata": "element-teaching-relations.meta.json",
+      "role": "derived element -> catalog species/reaction index",
+      "coverage": "118 elements",
+      "consumer_policy": "References only existing consolidated species/reaction identities; names, formulas, reaction conditions and phenomena remain owned by knowledge_catalog/consolidated data."
+    }
+  ],
+  "media_selection": {
+    "preferred": "wikidata-commons-media",
+    "fallback": "licensed-media-fallback",
+    "requirements": [
+      "retain per-file license/artist/credit metadata",
+      "preserve M02 element identity join by atomic_number + symbol",
+      "treat media as presentation/reference data rather than Element identity"
+    ]
+  },
+  "boundary": {
+    "full_element_truth": "M02 element_data",
+    "species_and_reaction_truth": "knowledge_catalog backed by consolidated consumer release",
+    "inorganic_element_scope": "teaching scope projection only"
+  }
+}
