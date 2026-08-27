@@ -1,0 +1,45 @@
+{
+  "source_key": "bowserinator-periodic-table-json",
+  "source_repository": "Bowserinator/Periodic-Table-JSON",
+  "source_url": "https://raw.githubusercontent.com/Bowserinator/Periodic-Table-JSON/master/PeriodicTableJSON.json",
+  "source_page": "https://github.com/Bowserinator/Periodic-Table-JSON",
+  "retrieved_at": "2026-08-27T12:22:50+00:00",
+  "source_record_count": 119,
+  "selected_record_count": 118,
+  "atomic_number_range": [
+    1,
+    118
+  ],
+  "source_content_sha256": "df2c43ec13e2be1c7ea07215057f3cddef224fd0f7dc6f0ad712d9ffdcfcc360",
+  "outputs": {
+    "element-detail-reference.jsonl": {
+      "record_count": 118,
+      "content_sha256": "5c2ec4d130b46dfb696a1e4bfd0ccb7528b70ad9865b0d2245622a338e93cfac"
+    },
+    "element-media-reference.jsonl": {
+      "record_count": 118,
+      "content_sha256": "1efce1dd8208dcd20c3eac5be34c967416086e9c3987a75586512a716eda9e6b"
+    }
+  },
+  "license": {
+    "dataset": "CC BY-SA 3.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "attribution": "Bowserinator/Periodic-Table-JSON",
+    "share_alike_scope": "these derived reference snapshot files",
+    "media_note": "sample_image attribution is preserved per element; downstream display must retain the supplied attribution/license text"
+  },
+  "ownership": {
+    "canonical_owner": "chem-wiki M02 element_data",
+    "role": "licensed external detail/media reference; not a second Element identity source"
+  },
+  "normalization_notes": [
+    "The upstream dataset currently contains a non-canonical extra record; application reference output is explicitly limited to atomic numbers 1..118.",
+    "Wikipedia summary prose is intentionally excluded.",
+    "Only structured element facts, source-page links and media metadata are retained.",
+    "Reference values are not application-published M02 claims until they pass the existing field publication policy.",
+    "Density units follow the upstream README convention: gases g/L; solids and liquids g/cm^3.",
+    "Melting and boiling points are Kelvin; molar heat is J/(mol*K).",
+    "The source dataset represents ionization energies and electron affinity in kJ/mol.",
+    "Media binaries are not copied into this repository; only source URLs and attribution metadata are stored."
+  ]
+}
