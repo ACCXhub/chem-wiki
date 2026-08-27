@@ -1,0 +1,148 @@
+name: Refresh element reference data
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/refresh-element-reference.yml
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot-pubchem-periodic-table:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch and validate PubChem periodic-table snapshot
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          from datetime import UTC, datetime
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+
+          SOURCE_URL = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/periodictable/JSON"
+          SOURCE_VERSION = "pug-periodictable-json-v1"
+          REQUIRED_COLUMNS = [
+              "AtomicNumber",
+              "Symbol",
+              "Name",
+              "AtomicMass",
+              "CPKHexColor",
+              "ElectronConfiguration",
+              "Electronegativity",
+              "AtomicRadius",
+              "IonizationEnergy",
+              "ElectronAffinity",
+              "OxidationStates",
+              "StandardState",
+              "MeltingPoint",
+              "BoilingPoint",
+              "Density",
+              "GroupBlock",
+              "YearDiscovered",
+          ]
+
+          request = Request(
+              SOURCE_URL,
+              headers={
+                  "Accept": "application/json",
+                  "User-Agent": "chem-wiki-element-data-snapshot/1.0",
+              },
+          )
+          with urlopen(request, timeout=60) as response:
+              payload = json.load(response)
+
+          table = payload.get("Table")
+          if not isinstance(table, dict):
+              raise SystemExit("PubChem payload has no Table object")
+          columns = table.get("Columns", {}).get("Column")
+          rows = table.get("Row")
+          if columns != REQUIRED_COLUMNS:
+              raise SystemExit(f"Unexpected PubChem columns: {columns!r}")
+          if not isinstance(rows, list) or len(rows) != 118:
+              raise SystemExit(f"Expected 118 PubChem element rows, got {len(rows) if isinstance(rows, list) else 'invalid'}")
+
+          atomic_numbers: list[int] = []
+          for row in rows:
+              cells = row.get("Cell") if isinstance(row, dict) else None
+              if not isinstance(cells, list) or len(cells) != len(columns):
+                  raise SystemExit("PubChem row does not match the declared column count")
+              atomic_numbers.append(int(cells[0]))
+          if atomic_numbers != list(range(1, 119)):
+              raise SystemExit("PubChem snapshot is not the canonical atomic-number range 1..118")
+
+          output_dir = Path("backend/src/chem_wiki/modules/element_data/seeds")
+          output_dir.mkdir(parents=True, exist_ok=True)
+          snapshot_path = output_dir / "pubchem-periodic-table.json"
+          metadata_path = output_dir / "pubchem-periodic-table.meta.json"
+
+          snapshot_text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+          snapshot_path.write_text(snapshot_text, encoding="utf-8")
+
+          retrieved_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+          metadata = {
+              "source_key": "pubchem-pug-periodic-table",
+              "source_version": SOURCE_VERSION,
+              "source_url": SOURCE_URL,
+              "citation_url": "https://pubchem.ncbi.nlm.nih.gov/docs/citation-guidelines",
+              "retrieved_at": retrieved_at,
+              "record_count": 118,
+              "atomic_number_range": [1, 118],
+              "content_sha256": hashlib.sha256(snapshot_text.encode("utf-8")).hexdigest(),
+              "columns": REQUIRED_COLUMNS,
+              "field_semantics": {
+                  "AtomicMass": {"unit": "u", "kind": "atomic_mass"},
+                  "CPKHexColor": {"unit": None, "kind": "display_color"},
+                  "ElectronConfiguration": {"unit": None, "kind": "electron_configuration"},
+                  "Electronegativity": {"unit": "Pauling", "kind": "electronegativity"},
+                  "AtomicRadius": {"unit": "pm", "kind": "van_der_waals_radius"},
+                  "IonizationEnergy": {"unit": "eV", "kind": "first_ionization_energy"},
+                  "ElectronAffinity": {"unit": "eV", "kind": "electron_affinity"},
+                  "OxidationStates": {"unit": None, "kind": "oxidation_states"},
+                  "StandardState": {"unit": None, "kind": "standard_state"},
+                  "MeltingPoint": {"unit": "K", "kind": "melting_point"},
+                  "BoilingPoint": {"unit": "K", "kind": "boiling_point"},
+                  "Density": {"unit": "g/cm^3", "kind": "density"},
+                  "GroupBlock": {"unit": None, "kind": "chemical_group_family"},
+                  "YearDiscovered": {"unit": None, "kind": "year_discovered"},
+              },
+              "ownership": {
+                  "canonical_owner": "chem-wiki M02 element_data",
+                  "role": "external source snapshot; not a second Element identity source",
+              },
+              "provenance_notes": [
+                  "Raw values are preserved exactly as returned by the PubChem PUG periodic-table endpoint.",
+                  "Empty strings mean the source did not provide a value in this table snapshot.",
+                  "Property publication into application-visible M02 values remains subject to the existing claim/publication policy.",
+                  "AtomicRadius is PubChem's van der Waals radius series, not a generic radius without qualifier.",
+                  "No third-party prose or image binaries are copied by this snapshot.",
+              ],
+          }
+          metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Commit refreshed data snapshot
+        shell: bash
+        run: |
+          if git diff --quiet -- backend/src/chem_wiki/modules/element_data/seeds/pubchem-periodic-table.json backend/src/chem_wiki/modules/element_data/seeds/pubchem-periodic-table.meta.json; then
+            echo "PubChem snapshot is unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/src/chem_wiki/modules/element_data/seeds/pubchem-periodic-table.json
+          git add backend/src/chem_wiki/modules/element_data/seeds/pubchem-periodic-table.meta.json
+          git commit -m "data(element): snapshot PubChem periodic table"
+          git push
