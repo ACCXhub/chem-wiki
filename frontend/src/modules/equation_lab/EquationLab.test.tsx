@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
 
 import { EquationLabView } from './EquationLab'
@@ -258,4 +258,64 @@ test('persists a direct palette favorite and recent use across reload', async ()
   )
   expect(await screen.findByRole('button', { name: '取消收藏水' })).toBeInTheDocument()
   expect(screen.getByText('最近')).toBeInTheDocument()
+})
+
+test('hydrates saved long-tail favorites and recents separately from the default catalog after reload', async () => {
+  window.localStorage.clear()
+  const longTail = species('long-tail', '甲苯', 'C7H8')
+  const onSearch = vi.fn((request: { query?: string; applicationIds?: string[] }) => {
+    if (request.query === '甲苯') return Promise.resolve([longTail])
+    if (request.applicationIds) return Promise.resolve([longTail])
+    return Promise.resolve(molecularCatalog)
+  })
+  const first = render(
+    <EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={onSearch} />,
+  )
+
+  await screen.findByText('氢气')
+  fireEvent.change(screen.getByRole('searchbox'), { target: { value: '甲苯' } })
+  await screen.findByText('甲苯')
+  fireEvent.click(screen.getByRole('button', { name: '收藏甲苯' }))
+  fireEvent.click(screen.getByRole('button', { name: '将甲苯添加到反应物' }))
+  first.unmount()
+
+  const second = render(
+    <EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={onSearch} />,
+  )
+
+  const quickAccess = await screen.findByRole('region', { name: '快捷访问' })
+  expect(within(quickAccess).getByText('收藏')).toBeInTheDocument()
+  fireEvent.click(within(quickAccess).getByRole('button', { name: '从收藏移除甲苯' }))
+  expect(await within(quickAccess).findByText('最近')).toBeInTheDocument()
+  fireEvent.click(within(quickAccess).getByRole('button', { name: '将甲苯添加到生成物' }))
+  expect(screen.getByRole('region', { name: '生成物' })).toHaveTextContent('甲苯')
+  expect(window.localStorage.getItem('chem-wiki.equation-lab.palette-preferences.v1'))
+    .toBe(JSON.stringify({ version: 1, favorites: [], recents: ['long-tail'] }))
+  second.unmount()
+
+  render(
+    <EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={onSearch} />,
+  )
+  const reloadedQuickAccess = await screen.findByRole('region', { name: '快捷访问' })
+  expect(within(reloadedQuickAccess).queryByText('收藏')).not.toBeInTheDocument()
+  expect(within(reloadedQuickAccess).getByText('最近')).toBeInTheDocument()
+})
+
+test('removes stale saved palette identities without breaking the normal catalog', async () => {
+  window.localStorage.setItem(
+    'chem-wiki.equation-lab.palette-preferences.v1',
+    JSON.stringify({ version: 1, favorites: ['missing-species'], recents: ['missing-species'] }),
+  )
+  render(
+    <EquationLabView
+      onBack={() => undefined}
+      onBalance={() => Promise.resolve(result)}
+      onSearch={(request) => Promise.resolve(request.applicationIds ? [] : molecularCatalog)}
+    />,
+  )
+
+  expect(await screen.findByText('氢气')).toBeInTheDocument()
+  await waitFor(() => expect(window.localStorage.getItem('chem-wiki.equation-lab.palette-preferences.v1'))
+    .toBe(JSON.stringify({ version: 1, favorites: [], recents: [] })))
+  expect(screen.queryByRole('region', { name: '快捷访问' })).not.toBeInTheDocument()
 })

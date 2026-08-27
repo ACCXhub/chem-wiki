@@ -26,6 +26,9 @@ export async function searchCatalogSpecies(
     equation_mode: query.equationMode,
     limit: String(query.limit ?? 50),
   })
+  for (const applicationId of query.applicationIds ?? []) {
+    parameters.append('application_id', applicationId)
+  }
   const normalizedQuery = query.query?.trim()
   if (normalizedQuery) parameters.set('q', normalizedQuery)
   if (query.primaryCategory) parameters.set('primary_category', query.primaryCategory)

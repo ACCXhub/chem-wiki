@@ -34,6 +34,7 @@ export interface EquationDraft {
 
 export interface CatalogSpeciesQuery {
   query?: string
+  applicationIds?: string[]
   primaryCategory?: string
   equationMode: EquationMode
   composition?: Record<string, number>

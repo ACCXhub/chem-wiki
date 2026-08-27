@@ -16,8 +16,8 @@ import {
 } from './composer'
 import {
   loadPalettePreferences,
-  orderPaletteSpecies,
   recordPaletteRecent,
+  resolvePaletteSpecies,
   savePalettePreferences,
   togglePaletteFavorite,
 } from './palette-preferences'
@@ -100,6 +100,8 @@ const SUITABILITY_LABELS = {
   deemphasized: '非典型',
 } as const
 
+const EXACT_LOOKUP_BATCH_SIZE = 50
+
 const EMPTY_DRAFT: EquationDraft = {
   mode: 'molecular',
   reactants: [],
@@ -143,6 +145,7 @@ export function EquationLabView({
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('')
   const [catalog, setCatalog] = useState<CatalogSpecies[]>([])
+  const [quickAccessSpecies, setQuickAccessSpecies] = useState<CatalogSpecies[]>([])
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [paletteMode, setPaletteMode] = useState<PaletteMode>('search')
@@ -187,6 +190,50 @@ export function EquationLabView({
       controller.abort()
     }
   }, [category, draft.mode, onSearch, query])
+
+  const savedApplicationIds = useMemo(
+    () => [...new Set([...preferences.favorites, ...preferences.recents])],
+    [preferences],
+  )
+
+  useEffect(() => {
+    if (!savedApplicationIds.length) return
+    const controller = new AbortController()
+    const batches = Array.from(
+      { length: Math.ceil(savedApplicationIds.length / EXACT_LOOKUP_BATCH_SIZE) },
+      (_, index) => savedApplicationIds.slice(
+        index * EXACT_LOOKUP_BATCH_SIZE,
+        (index + 1) * EXACT_LOOKUP_BATCH_SIZE,
+      ),
+    )
+    void Promise.all(batches.map((applicationIds) => onSearch({
+      applicationIds,
+      equationMode: draft.mode,
+      limit: 50,
+    }, controller.signal))).then((results) => {
+      if (controller.signal.aborted) return
+      const matches = results.flat()
+      setQuickAccessSpecies(matches)
+      const resolvedIds = new Set(matches.map((item) => item.applicationId))
+      const unavailableIds = savedApplicationIds.filter((id) => !resolvedIds.has(id))
+      if (!unavailableIds.length) return
+      setPreferences((current) => {
+        const next = {
+          favorites: current.favorites.filter((id) => !unavailableIds.includes(id)),
+          recents: current.recents.filter((id) => !unavailableIds.includes(id)),
+        }
+        if (
+          next.favorites.length === current.favorites.length
+          && next.recents.length === current.recents.length
+        ) return current
+        savePalettePreferences(next)
+        return next
+      })
+    }).catch(() => {
+      if (!controller.signal.aborted) setQuickAccessSpecies([])
+    })
+    return () => controller.abort()
+  }, [draft.mode, onSearch, savedApplicationIds])
 
   useEffect(() => {
     if (paletteMode !== 'builder') return
@@ -248,9 +295,19 @@ export function EquationLabView({
     return () => controller.abort()
   }, [builderResolution, draft.mode, onSearch, paletteMode])
 
-  const orderedCatalog = useMemo(
-    () => orderPaletteSpecies(catalog, preferences),
-    [catalog, preferences],
+  const favoriteSpecies = useMemo(
+    () => resolvePaletteSpecies(
+      savedApplicationIds.length ? quickAccessSpecies : [],
+      preferences.favorites,
+    ),
+    [preferences.favorites, quickAccessSpecies, savedApplicationIds.length],
+  )
+  const recentSpecies = useMemo(
+    () => resolvePaletteSpecies(
+      savedApplicationIds.length ? quickAccessSpecies : [],
+      preferences.recents.filter((id) => !preferences.favorites.includes(id)),
+    ),
+    [preferences.favorites, preferences.recents, quickAccessSpecies, savedApplicationIds.length],
   )
 
   const runBalance = async (equation: string, mode: EquationMode) => {
@@ -424,12 +481,33 @@ export function EquationLabView({
               </button>
               ))}
             </div>
+            {favoriteSpecies.length || recentSpecies.length ? (
+              <section className="palette-quick-access" aria-label="快捷访问">
+                {favoriteSpecies.length ? (
+                  <QuickAccessGroup
+                    title="收藏"
+                    species={favoriteSpecies}
+                    mode={draft.mode}
+                    onAddToSide={addToSide}
+                    onRemoveFavorite={toggleFavorite}
+                  />
+                ) : null}
+                {recentSpecies.length ? (
+                  <QuickAccessGroup
+                    title="最近"
+                    species={recentSpecies}
+                    mode={draft.mode}
+                    onAddToSide={addToSide}
+                  />
+                ) : null}
+              </section>
+            ) : null}
             {catalogError ? <div className="catalog-state is-error" role="alert">{catalogError}</div> : null}
             {!catalogError && !catalogLoading && !catalog.length ? (
               <div className="catalog-state">没有匹配当前搜索与分类的物种。</div>
             ) : null}
             <div className="species-list" aria-live="polite">
-              {orderedCatalog.map((species) => {
+              {catalog.map((species) => {
               const suitability = species.equationModes[draft.mode]
               const isFavorite = preferences.favorites.includes(species.applicationId)
               const isRecent = preferences.recents.includes(species.applicationId)
@@ -519,6 +597,59 @@ export function EquationLabView({
         此处只组合已知物种并调用 M05 守恒引擎；不预测生成物，不执行原子映射、键变化或机理推断。
       </p>
     </main>
+  )
+}
+
+interface QuickAccessGroupProps {
+  title: string
+  species: CatalogSpecies[]
+  mode: EquationMode
+  onAddToSide: (side: DraftSide, species: CatalogSpecies) => void
+  onRemoveFavorite?: (species: CatalogSpecies) => void
+}
+
+function QuickAccessGroup({
+  title,
+  species,
+  mode,
+  onAddToSide,
+  onRemoveFavorite,
+}: QuickAccessGroupProps) {
+  return (
+    <div className="quick-access-group">
+      <h3>{title}</h3>
+      <div className="quick-access-list">
+        {species.map((item) => {
+          const suitability = item.equationModes[mode]
+          return (
+            <article
+              key={item.applicationId}
+              className={`species-row kind-${item.entityKind} suitability-${suitability}`}
+            >
+              <div className="species-identity">
+                <ChemistryNotation formula={item.formula} charge={item.charge} />
+                <span><strong>{item.nameZh}</strong><small>{item.nameEn}</small></span>
+              </div>
+              <span className="suitability-label">{SUITABILITY_LABELS[suitability]}</span>
+              <div className="species-add-actions">
+                {onRemoveFavorite ? (
+                  <button
+                    type="button"
+                    className="species-favorite"
+                    onClick={() => onRemoveFavorite(item)}
+                    aria-label={`从收藏移除${item.nameZh}`}
+                  >
+                    ★ 收藏
+                  </button>
+                ) : null}
+                <button type="button" onClick={() => onAddToSide('reactants', item)} aria-label={`将${item.nameZh}添加到反应物`}>+ 反应物</button>
+                <button type="button" onClick={() => onAddToSide('products', item)} aria-label={`将${item.nameZh}添加到生成物`}>+ 生成物</button>
+              </div>
+            </article>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 

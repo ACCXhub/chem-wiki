@@ -74,3 +74,19 @@ test('passes controlled composition resolution facts to the existing catalog end
     { headers: { Accept: 'application/json' }, signal: undefined },
   )
 })
+
+test('serializes saved palette identities as repeated exact catalog query parameters', async () => {
+  const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await searchCatalogSpecies({
+    applicationIds: ['saved-water', 'saved-long-tail'],
+    equationMode: 'molecular',
+    limit: 50,
+  })
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/v1/catalog/species?equation_mode=molecular&limit=50&application_id=saved-water&application_id=saved-long-tail',
+    { headers: { Accept: 'application/json' }, signal: undefined },
+  )
+})

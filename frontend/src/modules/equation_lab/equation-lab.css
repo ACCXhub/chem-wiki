@@ -186,6 +186,12 @@
 .category-nav { display: flex; flex-wrap: wrap; gap: .28rem; margin: .55rem 0; }
 .category-nav button { padding: .32rem .52rem; border: 1px solid #29493f; border-radius: 99px; font-size: .61rem; }
 .category-nav button[aria-pressed="true"] { border-color: #b78e49; color: #f2cf87; background: #302817; }
+.palette-quick-access { display: grid; gap: .55rem; margin: .55rem 0 .7rem; padding: .58rem .65rem; border: 1px solid rgba(183, 142, 73, .32); border-radius: .65rem; background: rgba(48, 40, 23, .35); }
+.quick-access-group { display: grid; gap: .15rem; }
+.quick-access-group + .quick-access-group { padding-top: .5rem; border-top: 1px solid rgba(160, 207, 190, .1); }
+.quick-access-group h3 { margin: 0; color: #d9bd7b; font-size: .61rem; letter-spacing: .05em; }
+.quick-access-list { display: grid; max-height: 10rem; overflow-y: auto; }
+.quick-access-list .species-row { padding-inline: .05rem; }
 .species-list { display: grid; max-height: 24rem; overflow-y: auto; border-top: 1px solid rgba(160, 207, 190, .1); }
 .species-row { min-width: 0; gap: .55rem; padding: .48rem .1rem; border-bottom: 1px solid rgba(160, 207, 190, .09); }
 .species-row.suitability-deemphasized { opacity: .66; }

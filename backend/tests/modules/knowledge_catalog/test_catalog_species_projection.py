@@ -125,3 +125,32 @@ def test_catalog_reader_returns_multiple_or_no_known_composition_matches() -> No
         )
         == []
     )
+
+
+def test_catalog_reader_hydrates_exact_application_ids_without_normal_search_ranking() -> None:
+    water = _species(
+        consolidated_id="species:water",
+        formula="H2O",
+        charge=0,
+        entity_kind="substance",
+        composition={"H": 2, "O": 1},
+        classifications=[],
+    )
+    long_tail = _species(
+        consolidated_id="species:long-tail",
+        formula="C7H8",
+        charge=0,
+        entity_kind="substance",
+        composition={"C": 7, "H": 8},
+        classifications=["organic"],
+    )
+    reader = PostgresCatalogReader(
+        SessionStub([(water, _projection()), (long_tail, _projection())])
+    )
+
+    matches = reader.search_species(
+        application_ids=[long_tail.application_id],
+        limit=50,
+    )
+
+    assert [match.application_id for match in matches] == [long_tail.application_id]

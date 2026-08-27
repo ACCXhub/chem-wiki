@@ -58,23 +58,13 @@ export function recordPaletteRecent(
   }
 }
 
-export function orderPaletteSpecies(
+export function resolvePaletteSpecies(
   species: CatalogSpecies[],
-  preferences: PalettePreferences,
+  applicationIds: string[],
 ): CatalogSpecies[] {
-  const favoriteOrder = new Map(preferences.favorites.map((id, index) => [id, index]))
-  const recentOrder = new Map(preferences.recents.map((id, index) => [id, index]))
-  return species.map((item, index) => ({ item, index })).sort((left, right) => {
-    const leftFavorite = favoriteOrder.get(left.item.applicationId)
-    const rightFavorite = favoriteOrder.get(right.item.applicationId)
-    if (leftFavorite !== undefined || rightFavorite !== undefined) {
-      return (leftFavorite ?? Number.MAX_SAFE_INTEGER) - (rightFavorite ?? Number.MAX_SAFE_INTEGER)
-    }
-    const leftRecent = recentOrder.get(left.item.applicationId)
-    const rightRecent = recentOrder.get(right.item.applicationId)
-    if (leftRecent !== undefined || rightRecent !== undefined) {
-      return (leftRecent ?? Number.MAX_SAFE_INTEGER) - (rightRecent ?? Number.MAX_SAFE_INTEGER)
-    }
-    return left.index - right.index
-  }).map(({ item }) => item)
+  const byApplicationId = new Map(species.map((item) => [item.applicationId, item]))
+  return applicationIds.flatMap((id) => {
+    const item = byApplicationId.get(id)
+    return item ? [item] : []
+  })
 }

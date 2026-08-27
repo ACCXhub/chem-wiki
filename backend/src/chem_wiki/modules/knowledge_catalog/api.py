@@ -5,6 +5,7 @@ import re
 from collections.abc import Iterator
 from functools import lru_cache
 from typing import Annotated, Literal, Protocol
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, sessionmaker
@@ -26,6 +27,7 @@ class CatalogReader(Protocol):
         composition: dict[str, int] | None = None,
         total_charge: int | None = None,
         entity_kind: Literal["ion", "substance"] | None = None,
+        application_ids: list[UUID] | None = None,
         limit: int = 20,
     ) -> list[CatalogSpeciesResult]: ...
 
@@ -80,8 +82,11 @@ def search_species(
     composition: str | None = None,
     charge: int | None = None,
     entity_kind: Literal["ion", "substance"] | None = None,
+    application_id: Annotated[list[UUID] | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> list[CatalogSpeciesResult]:
+    if application_id is not None and len(application_id) > 50:
+        raise HTTPException(status_code=422, detail="application_id 最多可查询 50 个")
     return reader.search_species(
         query=q,
         primary_category=primary_category,
@@ -89,6 +94,7 @@ def search_species(
         composition=_parse_composition(composition),
         total_charge=charge,
         entity_kind=entity_kind,
+        application_ids=application_id,
         limit=limit,
     )
 

@@ -2,6 +2,7 @@
 
 import unicodedata
 from typing import Literal
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -77,6 +78,7 @@ class PostgresCatalogReader:
         composition: dict[str, int] | None = None,
         total_charge: int | None = None,
         entity_kind: Literal["ion", "substance"] | None = None,
+        application_ids: list[UUID] | None = None,
         limit: int = 20,
     ) -> list[CatalogSpeciesResult]:
         if not 1 <= limit <= 50:
@@ -84,10 +86,14 @@ class PostgresCatalogReader:
         if equation_mode is not None and equation_mode not in EQUATION_MODES:
             raise ValueError("不支持的 equation mode")
 
+        application_id_set = set(application_ids) if application_ids is not None else None
+
         statement = select(CatalogSpeciesRow, CatalogTeachingProjectionRow).join(
             CatalogTeachingProjectionRow,
             CatalogTeachingProjectionRow.species_id == CatalogSpeciesRow.consolidated_id,
         )
+        if application_id_set is not None:
+            statement = statement.where(CatalogSpeciesRow.application_id.in_(application_id_set))
         if primary_category is not None:
             statement = statement.where(
                 CatalogTeachingProjectionRow.primary_category == primary_category
@@ -97,6 +103,8 @@ class PostgresCatalogReader:
             tuple[int, int, int, str, CatalogSpeciesRow, CatalogTeachingProjectionRow]
         ] = []
         for species, projection in self._session.execute(statement):
+            if application_id_set is not None and species.application_id not in application_id_set:
+                continue
             if composition is not None and species.composition != composition:
                 continue
             if total_charge is not None and species.charge != total_charge:

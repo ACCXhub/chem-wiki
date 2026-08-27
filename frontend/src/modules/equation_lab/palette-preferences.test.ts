@@ -2,7 +2,7 @@ import { expect, test } from 'vitest'
 
 import {
   loadPalettePreferences,
-  orderPaletteSpecies,
+  resolvePaletteSpecies,
   recordPaletteRecent,
   savePalettePreferences,
   togglePaletteFavorite,
@@ -41,6 +41,6 @@ test('persists identity-based favorites and recents while ignoring unsupported s
   storage.set('bad', 'invalid')
 
   expect(loadPalettePreferences(localStorage)).toEqual({ favorites: ['water'], recents: ['water'] })
-  expect(orderPaletteSpecies([species('hydrogen'), species('water')], preferences).map((item) => item.applicationId))
-    .toEqual(['water', 'hydrogen'])
+  expect(resolvePaletteSpecies([species('hydrogen'), species('water')], preferences.favorites).map((item) => item.applicationId))
+    .toEqual(['water'])
 })
