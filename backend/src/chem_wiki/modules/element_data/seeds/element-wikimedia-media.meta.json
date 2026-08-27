@@ -1,0 +1,30 @@
+{
+  "atomic_number_range": [
+    1,
+    118
+  ],
+  "content_sha256": "4a63645d782764ad2f2b810e13c0262a2a363cc6f5da2ae1ffc98585193a1404",
+  "image_count": 106,
+  "licensed_image_count": 106,
+  "ownership": {
+    "canonical_owner": "chem-wiki M02 element_data",
+    "role": "external media reference projection; no media binary copied"
+  },
+  "record_count": 118,
+  "retrieved_at": "2026-08-27T12:26:10+00:00",
+  "selection_policy": "For each atomic number 1..118, choose the lexicographically first Wikidata P18 URI when multiple P18 values exist; retain Commons per-file license metadata for downstream display review.",
+  "source_key": "wikidata-commons-element-media",
+  "sources": {
+    "wikidata": {
+      "data_license": "CC0 1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "role": "element entity, atomic number, symbol and P18 image reference",
+      "url": "https://query.wikidata.org/sparql"
+    },
+    "wikimedia_commons": {
+      "license": "per-file; retain record-level license metadata",
+      "role": "image URL and per-file license/artist/credit metadata",
+      "url": "https://commons.wikimedia.org/"
+    }
+  }
+}
