@@ -1,0 +1,29 @@
+{
+  "content_sha256": "fe808b77affc8602ed30d01871238fa01a40fc22c8322db44a43412c511e426c",
+  "elements_with_related_reactions": 26,
+  "elements_with_related_species": 31,
+  "identity_anchor": {
+    "source": "backend/src/chem_wiki/modules/element_data/seeds/iupac-periodic-table-2022-05-04.json",
+    "source_version": "2022-05-04"
+  },
+  "ownership": {
+    "canonical_element_owner": "chem-wiki M02 element_data",
+    "canonical_species_reaction_owner": "chem-knowledge-data consolidated consumer release / chem-wiki knowledge_catalog",
+    "role": "derived reference index only; contains references, ranks and reaction reversibility already present in canonical sources"
+  },
+  "projection": "element_teaching_relations",
+  "record_count": 118,
+  "retrieved_at": "2026-08-27T12:30:59+00:00",
+  "source": {
+    "consumer_release": "consolidated-1.0.0",
+    "consumer_release_state": "READY_FOR_APP_IMPORT",
+    "manifest_sha256": "d65fac784353710a9a8f46df1aa42dd2357d7a223d20020fb00c2a7e0e355b05",
+    "reaction_records": 183,
+    "reactions_sha256": "b6087a3277b681b9f0bd053b1b75d5e86ae3ee41275df87204fdb2ec400e7ceb",
+    "reactions_url": "https://raw.githubusercontent.com/ACCXhub/chem-knowledge-data/main/packages/consolidated/generated/reactions.jsonl",
+    "repository": "ACCXhub/chem-knowledge-data",
+    "species_records": 309,
+    "species_sha256": "9077b5d070f5f40b23b3c001d09f370068239d9edf910b93296a2dd8292293fb",
+    "species_url": "https://raw.githubusercontent.com/ACCXhub/chem-knowledge-data/main/packages/consolidated/generated/species.jsonl"
+  }
+}
