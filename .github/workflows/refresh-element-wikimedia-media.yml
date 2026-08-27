@@ -1,0 +1,273 @@
+name: Refresh element Wikimedia media
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/refresh-element-wikimedia-media.yml
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot-wikimedia-element-media:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch Wikidata image links and Commons license metadata
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import html
+          import json
+          import re
+          from collections import defaultdict
+          from datetime import UTC, datetime
+          from pathlib import Path
+          from urllib.parse import unquote, urlencode, urlparse
+          from urllib.request import Request, urlopen
+
+          USER_AGENT = "chem-wiki-element-media/1.0 (educational chemistry dataset)"
+          SPARQL_URL = "https://query.wikidata.org/sparql"
+          COMMONS_API = "https://commons.wikimedia.org/w/api.php"
+          SOURCE_KEY = "wikidata-commons-element-media"
+
+          query = """
+          SELECT ?element ?atomicNumber ?symbol ?image WHERE {
+            ?element wdt:P1086 ?atomicNumber;
+                     wdt:P246 ?symbol.
+            OPTIONAL { ?element wdt:P18 ?image. }
+            FILTER(?atomicNumber >= 1 && ?atomicNumber <= 118)
+          }
+          ORDER BY ?atomicNumber ?image
+          """
+
+          body = urlencode({"query": query, "format": "json"}).encode()
+          request = Request(
+              SPARQL_URL,
+              data=body,
+              headers={
+                  "Accept": "application/sparql-results+json",
+                  "Content-Type": "application/x-www-form-urlencoded",
+                  "User-Agent": USER_AGENT,
+              },
+              method="POST",
+          )
+          with urlopen(request, timeout=90) as response:
+              wikidata_bytes = response.read()
+          payload = json.loads(wikidata_bytes)
+          bindings = payload.get("results", {}).get("bindings", [])
+          if not isinstance(bindings, list):
+              raise SystemExit("Wikidata SPARQL response has no bindings array")
+
+          by_number: dict[int, dict[str, object]] = {}
+          image_candidates: dict[int, set[str]] = defaultdict(set)
+          for binding in bindings:
+              if not isinstance(binding, dict):
+                  continue
+              try:
+                  number = int(float(binding["atomicNumber"]["value"]))
+                  symbol = binding["symbol"]["value"]
+                  entity_url = binding["element"]["value"]
+              except (KeyError, TypeError, ValueError):
+                  continue
+              if number < 1 or number > 118:
+                  continue
+              candidate = {
+                  "atomic_number": number,
+                  "symbol": symbol,
+                  "wikidata_entity": entity_url.rsplit("/", 1)[-1],
+                  "wikidata_url": entity_url,
+              }
+              previous = by_number.get(number)
+              if previous is None or (str(candidate["wikidata_entity"]), symbol) < (
+                  str(previous["wikidata_entity"]), str(previous["symbol"])
+              ):
+                  by_number[number] = candidate
+              image = binding.get("image", {}).get("value") if isinstance(binding.get("image"), dict) else None
+              if isinstance(image, str) and image:
+                  image_candidates[number].add(image)
+
+          missing_numbers = [number for number in range(1, 119) if number not in by_number]
+          if missing_numbers:
+              raise SystemExit(f"Wikidata omitted canonical elements: {missing_numbers}")
+
+          chosen_image_uri: dict[int, str] = {
+              number: sorted(values)[0]
+              for number, values in image_candidates.items()
+              if values
+          }
+
+          def file_name_from_uri(uri: str) -> str:
+              path = unquote(urlparse(uri).path)
+              marker = "/Special:FilePath/"
+              if marker in path:
+                  return path.split(marker, 1)[1]
+              return path.rsplit("/", 1)[-1]
+
+          file_names = sorted({file_name_from_uri(uri) for uri in chosen_image_uri.values()})
+
+          def plain(value: str | None) -> str | None:
+              if not value:
+                  return None
+              text = re.sub(r"<[^>]+>", " ", value)
+              text = html.unescape(text)
+              text = re.sub(r"\s+", " ", text).strip()
+              return text or None
+
+          commons_by_file: dict[str, dict[str, object]] = {}
+          for start in range(0, len(file_names), 40):
+              batch = file_names[start : start + 40]
+              params = {
+                  "action": "query",
+                  "format": "json",
+                  "formatversion": "2",
+                  "prop": "imageinfo",
+                  "iiprop": "url|extmetadata",
+                  "titles": "|".join(f"File:{name}" for name in batch),
+              }
+              request = Request(
+                  COMMONS_API + "?" + urlencode(params),
+                  headers={"Accept": "application/json", "User-Agent": USER_AGENT},
+              )
+              with urlopen(request, timeout=90) as response:
+                  commons_payload = json.load(response)
+              pages = commons_payload.get("query", {}).get("pages", [])
+              if not isinstance(pages, list):
+                  raise SystemExit("Commons API response has no pages array")
+              for page in pages:
+                  if not isinstance(page, dict):
+                      continue
+                  title = page.get("title")
+                  if not isinstance(title, str) or not title.startswith("File:"):
+                      continue
+                  info_list = page.get("imageinfo")
+                  if not isinstance(info_list, list) or not info_list:
+                      continue
+                  info = info_list[0]
+                  if not isinstance(info, dict):
+                      continue
+                  ext = info.get("extmetadata") if isinstance(info.get("extmetadata"), dict) else {}
+
+                  def ext_value(key: str) -> str | None:
+                      item = ext.get(key)
+                      return item.get("value") if isinstance(item, dict) and isinstance(item.get("value"), str) else None
+
+                  commons_by_file[title[5:]] = {
+                      "url": info.get("url"),
+                      "description_url": info.get("descriptionurl"),
+                      "license_short_name": plain(ext_value("LicenseShortName")),
+                      "license_url": ext_value("LicenseUrl"),
+                      "usage_terms": plain(ext_value("UsageTerms")),
+                      "artist": plain(ext_value("Artist")),
+                      "credit": plain(ext_value("Credit")),
+                      "attribution_required": plain(ext_value("AttributionRequired")),
+                      "object_name": plain(ext_value("ObjectName")),
+                  }
+
+          records: list[dict[str, object]] = []
+          licensed_count = 0
+          image_count = 0
+          for number in range(1, 119):
+              identity = by_number[number]
+              image_uri = chosen_image_uri.get(number)
+              file_name = file_name_from_uri(image_uri) if image_uri else None
+              media = commons_by_file.get(file_name) if file_name else None
+              if image_uri:
+                  image_count += 1
+              if media and media.get("license_short_name"):
+                  licensed_count += 1
+              records.append(
+                  {
+                      **identity,
+                      "image": (
+                          {
+                              "file_name": file_name,
+                              "wikidata_image_uri": image_uri,
+                              **media,
+                          }
+                          if image_uri and media
+                          else (
+                              {
+                                  "file_name": file_name,
+                                  "wikidata_image_uri": image_uri,
+                                  "url": image_uri,
+                                  "description_url": None,
+                                  "license_short_name": None,
+                                  "license_url": None,
+                                  "usage_terms": None,
+                                  "artist": None,
+                                  "credit": None,
+                                  "attribution_required": None,
+                                  "object_name": None,
+                              }
+                              if image_uri
+                              else None
+                          )
+                      ),
+                      "source_key": SOURCE_KEY,
+                  }
+              )
+
+          output_dir = Path("backend/src/chem_wiki/modules/element_data/seeds")
+          output_dir.mkdir(parents=True, exist_ok=True)
+          output_path = output_dir / "element-wikimedia-media.jsonl"
+          meta_path = output_dir / "element-wikimedia-media.meta.json"
+
+          text = "".join(
+              json.dumps(record, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n"
+              for record in records
+          )
+          output_path.write_text(text, encoding="utf-8")
+          meta = {
+              "source_key": SOURCE_KEY,
+              "retrieved_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
+              "record_count": 118,
+              "atomic_number_range": [1, 118],
+              "image_count": image_count,
+              "licensed_image_count": licensed_count,
+              "content_sha256": hashlib.sha256(text.encode()).hexdigest(),
+              "sources": {
+                  "wikidata": {
+                      "url": SPARQL_URL,
+                      "role": "element entity, atomic number, symbol and P18 image reference",
+                      "data_license": "CC0 1.0",
+                      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+                  },
+                  "wikimedia_commons": {
+                      "url": "https://commons.wikimedia.org/",
+                      "role": "image URL and per-file license/artist/credit metadata",
+                      "license": "per-file; retain record-level license metadata",
+                  },
+              },
+              "ownership": {
+                  "canonical_owner": "chem-wiki M02 element_data",
+                  "role": "external media reference projection; no media binary copied",
+              },
+              "selection_policy": "For each atomic number 1..118, choose the lexicographically first Wikidata P18 URI when multiple P18 values exist; retain Commons per-file license metadata for downstream display review.",
+          }
+          meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+
+      - name: Commit refreshed Wikimedia media reference
+        shell: bash
+        run: |
+          git add backend/src/chem_wiki/modules/element_data/seeds/element-wikimedia-media.jsonl
+          git add backend/src/chem_wiki/modules/element_data/seeds/element-wikimedia-media.meta.json
+          if git diff --cached --quiet; then
+            echo "Wikimedia element media reference is unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "data(element): snapshot Wikimedia media metadata"
+          git push
