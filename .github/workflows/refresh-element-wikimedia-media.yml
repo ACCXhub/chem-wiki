@@ -36,10 +36,28 @@ jobs:
           from urllib.parse import unquote, urlencode, urlparse
           from urllib.request import Request, urlopen
 
-          USER_AGENT = "chem-wiki-element-media/1.0 (educational chemistry dataset)"
+          USER_AGENT = "chem-wiki-element-media/1.1 (educational chemistry dataset)"
           SPARQL_URL = "https://query.wikidata.org/sparql"
           COMMONS_API = "https://commons.wikimedia.org/w/api.php"
           SOURCE_KEY = "wikidata-commons-element-media"
+          IUPAC_SEED = Path(
+              "backend/src/chem_wiki/modules/element_data/seeds/"
+              "iupac-periodic-table-2022-05-04.json"
+          )
+
+          iupac = json.loads(IUPAC_SEED.read_text(encoding="utf-8"))
+          seed_records = iupac.get("records")
+          if not isinstance(seed_records, list) or len(seed_records) != 118:
+              raise SystemExit("IUPAC identity seed must contain 118 elements")
+          expected_symbols = {
+              int(record[0]): str(record[1])
+              for record in seed_records
+              if isinstance(record, list) and len(record) >= 2
+          }
+          if expected_symbols != {
+              number: expected_symbols.get(number) for number in range(1, 119)
+          } or any(expected_symbols.get(number) is None for number in range(1, 119)):
+              raise SystemExit("IUPAC identity seed is not the canonical range 1..118")
 
           query = """
           SELECT ?element ?atomicNumber ?symbol ?image WHERE {
@@ -48,7 +66,7 @@ jobs:
             OPTIONAL { ?element wdt:P18 ?image. }
             FILTER(?atomicNumber >= 1 && ?atomicNumber <= 118)
           }
-          ORDER BY ?atomicNumber ?image
+          ORDER BY ?atomicNumber ?element ?image
           """
 
           body = urlencode({"query": query, "format": "json"}).encode()
@@ -69,43 +87,55 @@ jobs:
           if not isinstance(bindings, list):
               raise SystemExit("Wikidata SPARQL response has no bindings array")
 
-          by_number: dict[int, dict[str, object]] = {}
-          image_candidates: dict[int, set[str]] = defaultdict(set)
+          candidates: dict[int, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+          entity_urls: dict[str, str] = {}
           for binding in bindings:
               if not isinstance(binding, dict):
                   continue
               try:
                   number = int(float(binding["atomicNumber"]["value"]))
-                  symbol = binding["symbol"]["value"]
-                  entity_url = binding["element"]["value"]
+                  symbol = str(binding["symbol"]["value"])
+                  entity_url = str(binding["element"]["value"])
               except (KeyError, TypeError, ValueError):
                   continue
-              if number < 1 or number > 118:
+              if not 1 <= number <= 118 or symbol != expected_symbols[number]:
                   continue
-              candidate = {
-                  "atomic_number": number,
-                  "symbol": symbol,
-                  "wikidata_entity": entity_url.rsplit("/", 1)[-1],
-                  "wikidata_url": entity_url,
-              }
-              previous = by_number.get(number)
-              if previous is None or (str(candidate["wikidata_entity"]), symbol) < (
-                  str(previous["wikidata_entity"]), str(previous["symbol"])
-              ):
-                  by_number[number] = candidate
-              image = binding.get("image", {}).get("value") if isinstance(binding.get("image"), dict) else None
+              entity_id = entity_url.rsplit("/", 1)[-1]
+              entity_urls[entity_id] = entity_url
+              image = (
+                  binding.get("image", {}).get("value")
+                  if isinstance(binding.get("image"), dict)
+                  else None
+              )
               if isinstance(image, str) and image:
-                  image_candidates[number].add(image)
+                  candidates[number][entity_id].add(image)
+              else:
+                  candidates[number].setdefault(entity_id, set())
 
-          missing_numbers = [number for number in range(1, 119) if number not in by_number]
-          if missing_numbers:
-              raise SystemExit(f"Wikidata omitted canonical elements: {missing_numbers}")
+          selected_entities: dict[int, str] = {}
+          chosen_image_uri: dict[int, str] = {}
+          for number in range(1, 119):
+              entity_map = candidates.get(number)
+              if not entity_map:
+                  raise SystemExit(
+                      f"Wikidata has no entity matching IUPAC identity "
+                      f"{number} {expected_symbols[number]}"
+                  )
+              ranked = sorted(
+                  entity_map,
+                  key=lambda entity_id: (
+                      0 if entity_map[entity_id] else 1,
+                      int(entity_id[1:]) if entity_id.startswith("Q") and entity_id[1:].isdigit() else 10**12,
+                      entity_id,
+                  ),
+              )
+              entity_id = ranked[0]
+              selected_entities[number] = entity_id
+              if entity_map[entity_id]:
+                  chosen_image_uri[number] = sorted(entity_map[entity_id])[0]
 
-          chosen_image_uri: dict[int, str] = {
-              number: sorted(values)[0]
-              for number, values in image_candidates.items()
-              if values
-          }
+          if expected_symbols[1] != "H" or selected_entities.get(1) == "Q102296":
+              raise SystemExit("Hydrogen identity guard failed; isotope entity selected")
 
           def file_name_from_uri(uri: str) -> str:
               path = unquote(urlparse(uri).path)
@@ -160,7 +190,11 @@ jobs:
 
                   def ext_value(key: str) -> str | None:
                       item = ext.get(key)
-                      return item.get("value") if isinstance(item, dict) and isinstance(item.get("value"), str) else None
+                      return (
+                          item.get("value")
+                          if isinstance(item, dict) and isinstance(item.get("value"), str)
+                          else None
+                      )
 
                   commons_by_file[title[5:]] = {
                       "url": info.get("url"),
@@ -178,7 +212,7 @@ jobs:
           licensed_count = 0
           image_count = 0
           for number in range(1, 119):
-              identity = by_number[number]
+              entity_id = selected_entities[number]
               image_uri = chosen_image_uri.get(number)
               file_name = file_name_from_uri(image_uri) if image_uri else None
               media = commons_by_file.get(file_name) if file_name else None
@@ -188,7 +222,10 @@ jobs:
                   licensed_count += 1
               records.append(
                   {
-                      **identity,
+                      "atomic_number": number,
+                      "symbol": expected_symbols[number],
+                      "wikidata_entity": entity_id,
+                      "wikidata_url": entity_urls[entity_id],
                       "image": (
                           {
                               "file_name": file_name,
@@ -233,13 +270,18 @@ jobs:
               "retrieved_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
               "record_count": 118,
               "atomic_number_range": [1, 118],
+              "identity_anchor": {
+                  "source": IUPAC_SEED.as_posix(),
+                  "source_version": iupac.get("metadata", {}).get("source_version"),
+                  "matching_rule": "atomic_number and symbol must both match the local IUPAC identity seed",
+              },
               "image_count": image_count,
               "licensed_image_count": licensed_count,
               "content_sha256": hashlib.sha256(text.encode()).hexdigest(),
               "sources": {
                   "wikidata": {
                       "url": SPARQL_URL,
-                      "role": "element entity, atomic number, symbol and P18 image reference",
+                      "role": "P18 image reference resolved only after IUPAC identity match",
                       "data_license": "CC0 1.0",
                       "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
                   },
@@ -253,9 +295,16 @@ jobs:
                   "canonical_owner": "chem-wiki M02 element_data",
                   "role": "external media reference projection; no media binary copied",
               },
-              "selection_policy": "For each atomic number 1..118, choose the lexicographically first Wikidata P18 URI when multiple P18 values exist; retain Commons per-file license metadata for downstream display review.",
+              "selection_policy": (
+                  "Anchor identity to the local IUPAC 1..118 seed; discard Wikidata rows whose symbol "
+                  "does not match that atomic number; among remaining entities prefer one with P18 and "
+                  "then lowest numeric Q-id; preserve Commons per-file licensing metadata."
+              ),
           }
-          meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          meta_path.write_text(
+              json.dumps(meta, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
           PY
 
       - name: Commit refreshed Wikimedia media reference
