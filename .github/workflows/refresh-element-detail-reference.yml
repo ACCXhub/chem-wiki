@@ -1,0 +1,220 @@
+name: Refresh element detail reference
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/refresh-element-detail-reference.yml
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot-element-detail-reference:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch and normalize licensed element detail/media reference
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          from datetime import UTC, datetime
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+
+          SOURCE_REPO = "Bowserinator/Periodic-Table-JSON"
+          SOURCE_URL = "https://raw.githubusercontent.com/Bowserinator/Periodic-Table-JSON/master/PeriodicTableJSON.json"
+          SOURCE_PAGE = "https://github.com/Bowserinator/Periodic-Table-JSON"
+          LICENSE_URL = "https://creativecommons.org/licenses/by-sa/3.0/"
+
+          request = Request(
+              SOURCE_URL,
+              headers={
+                  "Accept": "application/json",
+                  "User-Agent": "chem-wiki-element-detail-reference/1.0",
+              },
+          )
+          with urlopen(request, timeout=60) as response:
+              raw_bytes = response.read()
+          payload = json.loads(raw_bytes)
+
+          elements = payload.get("elements")
+          if not isinstance(elements, list) or len(elements) != 118:
+              raise SystemExit(
+                  f"Expected 118 reference elements, got {len(elements) if isinstance(elements, list) else 'invalid'}"
+              )
+
+          numbers = [item.get("number") for item in elements if isinstance(item, dict)]
+          if numbers != list(range(1, 119)):
+              raise SystemExit("Reference dataset is not the canonical atomic-number range 1..118")
+
+          output_dir = Path("backend/src/chem_wiki/modules/element_data/seeds")
+          output_dir.mkdir(parents=True, exist_ok=True)
+          detail_path = output_dir / "element-detail-reference.jsonl"
+          media_path = output_dir / "element-media-reference.jsonl"
+          metadata_path = output_dir / "element-detail-reference.meta.json"
+
+          detail_records: list[dict[str, object]] = []
+          media_records: list[dict[str, object]] = []
+
+          for element in elements:
+              if not isinstance(element, dict):
+                  raise SystemExit("Reference element entry must be an object")
+              atomic_number = element["number"]
+              symbol = element["symbol"]
+              phase = element.get("phase")
+
+              density = element.get("density")
+              if density is None:
+                  density_unit = None
+              elif isinstance(phase, str) and phase.casefold() == "gas":
+                  density_unit = "g/L"
+              else:
+                  density_unit = "g/cm^3"
+
+              detail_records.append(
+                  {
+                      "atomic_number": atomic_number,
+                      "symbol": symbol,
+                      "name_en": element.get("name"),
+                      "appearance": element.get("appearance"),
+                      "category": element.get("category"),
+                      "phase": phase,
+                      "block": element.get("block"),
+                      "shells": element.get("shells"),
+                      "electron_configuration": element.get("electron_configuration"),
+                      "electron_configuration_semantic": element.get(
+                          "electron_configuration_semantic"
+                      ),
+                      "electron_affinity": {
+                          "value": element.get("electron_affinity"),
+                          "unit": "kJ/mol",
+                          "source_semantics": "first electron affinity as represented by source dataset",
+                      },
+                      "electronegativity": {
+                          "value": element.get("electronegativity_pauling"),
+                          "scale": "Pauling",
+                      },
+                      "ionization_energies": {
+                          "values": element.get("ionization_energies"),
+                          "unit": "kJ/mol",
+                      },
+                      "melting_point": {"value": element.get("melt"), "unit": "K"},
+                      "boiling_point": {"value": element.get("boil"), "unit": "K"},
+                      "density": {"value": density, "unit": density_unit},
+                      "molar_heat": {
+                          "value": element.get("molar_heat"),
+                          "unit": "J/(mol*K)",
+                      },
+                      "discovered_by": element.get("discovered_by"),
+                      "named_by": element.get("named_by"),
+                      "cpk_hex": element.get("cpk-hex"),
+                      "source_page": element.get("source"),
+                      "source_key": "bowserinator-periodic-table-json",
+                  }
+              )
+
+              sample_image = element.get("image")
+              if sample_image is not None and not isinstance(sample_image, dict):
+                  raise SystemExit(f"Element {atomic_number} image metadata must be an object or null")
+              media_records.append(
+                  {
+                      "atomic_number": atomic_number,
+                      "symbol": symbol,
+                      "bohr_model_image": element.get("bohr_model_image"),
+                      "bohr_model_3d": element.get("bohr_model_3d"),
+                      "spectral_image": element.get("spectral_img"),
+                      "sample_image": (
+                          {
+                              "title": sample_image.get("title"),
+                              "url": sample_image.get("url"),
+                              "attribution": sample_image.get("attribution"),
+                          }
+                          if isinstance(sample_image, dict)
+                          else None
+                      ),
+                      "source_key": "bowserinator-periodic-table-json",
+                  }
+              )
+
+          detail_text = "".join(
+              json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+              for record in detail_records
+          )
+          media_text = "".join(
+              json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+              for record in media_records
+          )
+          detail_path.write_text(detail_text, encoding="utf-8")
+          media_path.write_text(media_text, encoding="utf-8")
+
+          retrieved_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+          metadata = {
+              "source_key": "bowserinator-periodic-table-json",
+              "source_repository": SOURCE_REPO,
+              "source_url": SOURCE_URL,
+              "source_page": SOURCE_PAGE,
+              "retrieved_at": retrieved_at,
+              "record_count": 118,
+              "atomic_number_range": [1, 118],
+              "source_content_sha256": hashlib.sha256(raw_bytes).hexdigest(),
+              "outputs": {
+                  "element-detail-reference.jsonl": {
+                      "record_count": len(detail_records),
+                      "content_sha256": hashlib.sha256(detail_text.encode("utf-8")).hexdigest(),
+                  },
+                  "element-media-reference.jsonl": {
+                      "record_count": len(media_records),
+                      "content_sha256": hashlib.sha256(media_text.encode("utf-8")).hexdigest(),
+                  },
+              },
+              "license": {
+                  "dataset": "CC BY-SA 3.0",
+                  "license_url": LICENSE_URL,
+                  "attribution": "Bowserinator/Periodic-Table-JSON",
+                  "share_alike_scope": "these derived reference snapshot files",
+                  "media_note": "sample_image attribution is preserved per element; downstream display must retain the supplied attribution/license text",
+              },
+              "ownership": {
+                  "canonical_owner": "chem-wiki M02 element_data",
+                  "role": "licensed external detail/media reference; not a second Element identity source",
+              },
+              "normalization_notes": [
+                  "Wikipedia summary prose is intentionally excluded.",
+                  "Only structured element facts, source-page links and media metadata are retained.",
+                  "Reference values are not application-published M02 claims until they pass the existing field publication policy.",
+                  "Density units follow the upstream README convention: gases g/L; solids and liquids g/cm^3.",
+                  "Melting and boiling points are Kelvin; molar heat is J/(mol*K).",
+                  "The source dataset represents ionization energies and electron affinity in kJ/mol.",
+                  "Media binaries are not copied into this repository; only source URLs and attribution metadata are stored.",
+              ],
+          }
+          metadata_path.write_text(
+              json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+
+      - name: Commit refreshed element detail/media reference
+        shell: bash
+        run: |
+          git add backend/src/chem_wiki/modules/element_data/seeds/element-detail-reference.jsonl
+          git add backend/src/chem_wiki/modules/element_data/seeds/element-media-reference.jsonl
+          git add backend/src/chem_wiki/modules/element_data/seeds/element-detail-reference.meta.json
+          if git diff --cached --quiet; then
+            echo "Element detail/media reference is unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "data(element): snapshot detail and media reference"
+          git push
