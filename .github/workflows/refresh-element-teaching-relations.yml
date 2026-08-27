@@ -1,0 +1,252 @@
+name: Refresh element teaching relations
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/refresh-element-teaching-relations.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build-element-teaching-relations:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build element to species/reaction projection
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          from collections import defaultdict
+          from datetime import UTC, datetime
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+
+          USER_AGENT = "chem-wiki-element-teaching-relations/1.0"
+          BASE = "https://raw.githubusercontent.com/ACCXhub/chem-knowledge-data/main/packages/consolidated/generated"
+          SPECIES_URL = f"{BASE}/species.jsonl"
+          REACTIONS_URL = f"{BASE}/reactions.jsonl"
+          MANIFEST_URL = f"{BASE}/manifest.json"
+          IUPAC_SEED = Path(
+              "backend/src/chem_wiki/modules/element_data/seeds/"
+              "iupac-periodic-table-2022-05-04.json"
+          )
+          PRIORITY = {"core": 0, "common": 1, "extended": 2}
+
+          def fetch_bytes(url: str) -> bytes:
+              request = Request(url, headers={"Accept": "application/json", "User-Agent": USER_AGENT})
+              with urlopen(request, timeout=90) as response:
+                  return response.read()
+
+          def parse_jsonl(raw: bytes, label: str) -> list[dict[str, object]]:
+              records: list[dict[str, object]] = []
+              for line_no, line in enumerate(raw.decode("utf-8").splitlines(), 1):
+                  if not line.strip():
+                      continue
+                  value = json.loads(line)
+                  if not isinstance(value, dict):
+                      raise SystemExit(f"{label}:{line_no} is not an object")
+                  records.append(value)
+              return records
+
+          species_raw = fetch_bytes(SPECIES_URL)
+          reactions_raw = fetch_bytes(REACTIONS_URL)
+          manifest_raw = fetch_bytes(MANIFEST_URL)
+          species = parse_jsonl(species_raw, "species")
+          reactions = parse_jsonl(reactions_raw, "reactions")
+          manifest = json.loads(manifest_raw)
+          if not isinstance(manifest, dict):
+              raise SystemExit("consolidated manifest must be an object")
+
+          species_by_id = {
+              str(item["id"]): item
+              for item in species
+              if isinstance(item.get("id"), str)
+          }
+          reaction_by_id = {
+              str(item["id"]): item
+              for item in reactions
+              if isinstance(item.get("id"), str)
+          }
+          if len(species_by_id) != len(species):
+              raise SystemExit("consolidated species IDs are missing or duplicated")
+          if len(reaction_by_id) != len(reactions):
+              raise SystemExit("consolidated reaction IDs are missing or duplicated")
+
+          iupac = json.loads(IUPAC_SEED.read_text(encoding="utf-8"))
+          seed_records = iupac.get("records")
+          if not isinstance(seed_records, list) or len(seed_records) != 118:
+              raise SystemExit("IUPAC identity seed must contain 118 elements")
+          canonical = [(int(item[0]), str(item[1])) for item in seed_records]
+          if [number for number, _ in canonical] != list(range(1, 119)):
+              raise SystemExit("IUPAC identity seed must cover atomic numbers 1..118")
+          canonical_symbols = {symbol for _, symbol in canonical}
+
+          species_for_symbol: dict[str, set[str]] = defaultdict(set)
+          for item in species:
+              species_id = str(item["id"])
+              composition = item.get("composition")
+              if not isinstance(composition, dict):
+                  continue
+              for symbol, count in composition.items():
+                  if symbol not in canonical_symbols:
+                      raise SystemExit(f"species {species_id} has unknown element symbol {symbol!r}")
+                  if not isinstance(count, int) or count <= 0:
+                      raise SystemExit(f"species {species_id} has invalid composition count for {symbol}")
+                  species_for_symbol[symbol].add(species_id)
+
+          reactions_for_symbol: dict[str, set[str]] = defaultdict(set)
+          for reaction in reactions:
+              reaction_id = str(reaction["id"])
+              touched: set[str] = set()
+              participants = reaction.get("participants")
+              if not isinstance(participants, list):
+                  raise SystemExit(f"reaction {reaction_id} participants must be a list")
+              for participant in participants:
+                  if not isinstance(participant, dict):
+                      continue
+                  species_id = participant.get("species_id")
+                  if not isinstance(species_id, str):
+                      continue
+                  species_item = species_by_id.get(species_id)
+                  if species_item is None:
+                      raise SystemExit(f"reaction {reaction_id} references missing species {species_id}")
+                  composition = species_item.get("composition")
+                  if isinstance(composition, dict):
+                      touched.update(str(symbol) for symbol in composition)
+              for symbol in touched:
+                  if symbol in canonical_symbols:
+                      reactions_for_symbol[symbol].add(reaction_id)
+
+          def species_sort_key(species_id: str) -> tuple[object, ...]:
+              item = species_by_id[species_id]
+              return (
+                  PRIORITY.get(str(item.get("teaching_priority")), 99),
+                  str(item.get("formula") or ""),
+                  str(item.get("name_zh") or ""),
+                  species_id,
+              )
+
+          def reaction_sort_key(reaction_id: str) -> tuple[object, ...]:
+              item = reaction_by_id[reaction_id]
+              return (
+                  PRIORITY.get(str(item.get("teaching_priority")), 99),
+                  str(item.get("name_zh") or ""),
+                  reaction_id,
+              )
+
+          output: list[dict[str, object]] = []
+          for atomic_number, symbol in canonical:
+              species_ids = sorted(species_for_symbol.get(symbol, set()), key=species_sort_key)
+              reaction_ids = sorted(reactions_for_symbol.get(symbol, set()), key=reaction_sort_key)
+              output.append(
+                  {
+                      "atomic_number": atomic_number,
+                      "symbol": symbol,
+                      "related_species": [
+                          {
+                              "species_id": species_id,
+                              "teaching_priority": species_by_id[species_id].get("teaching_priority"),
+                          }
+                          for species_id in species_ids
+                      ],
+                      "related_reactions": [
+                          {
+                              "reaction_id": reaction_id,
+                              "teaching_priority": reaction_by_id[reaction_id].get("teaching_priority"),
+                              "reversible": reaction_by_id[reaction_id].get("reversible"),
+                          }
+                          for reaction_id in reaction_ids
+                      ],
+                      "counts": {
+                          "species": len(species_ids),
+                          "reactions": len(reaction_ids),
+                      },
+                  }
+              )
+
+          if len(output) != 118:
+              raise SystemExit("element teaching projection must contain 118 rows")
+          for record in output:
+              symbol = str(record["symbol"])
+              for relation in record["related_species"]:
+                  species_id = relation["species_id"]
+                  composition = species_by_id[species_id].get("composition")
+                  if not isinstance(composition, dict) or symbol not in composition:
+                      raise SystemExit(f"invalid element/species relation {symbol} -> {species_id}")
+              for relation in record["related_reactions"]:
+                  reaction_id = relation["reaction_id"]
+                  if reaction_id not in reactions_for_symbol[symbol]:
+                      raise SystemExit(f"invalid element/reaction relation {symbol} -> {reaction_id}")
+
+          output_dir = Path("backend/src/chem_wiki/modules/element_data/seeds")
+          output_dir.mkdir(parents=True, exist_ok=True)
+          output_path = output_dir / "element-teaching-relations.jsonl"
+          meta_path = output_dir / "element-teaching-relations.meta.json"
+          text = "".join(
+              json.dumps(item, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n"
+              for item in output
+          )
+          output_path.write_text(text, encoding="utf-8")
+
+          nonempty_species = sum(bool(item["related_species"]) for item in output)
+          nonempty_reactions = sum(bool(item["related_reactions"]) for item in output)
+          meta = {
+              "projection": "element_teaching_relations",
+              "retrieved_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
+              "record_count": 118,
+              "elements_with_related_species": nonempty_species,
+              "elements_with_related_reactions": nonempty_reactions,
+              "source": {
+                  "repository": "ACCXhub/chem-knowledge-data",
+                  "consumer_release": manifest.get("release"),
+                  "consumer_release_state": manifest.get("state"),
+                  "species_url": SPECIES_URL,
+                  "species_sha256": hashlib.sha256(species_raw).hexdigest(),
+                  "species_records": len(species),
+                  "reactions_url": REACTIONS_URL,
+                  "reactions_sha256": hashlib.sha256(reactions_raw).hexdigest(),
+                  "reaction_records": len(reactions),
+                  "manifest_sha256": hashlib.sha256(manifest_raw).hexdigest(),
+              },
+              "identity_anchor": {
+                  "source": IUPAC_SEED.as_posix(),
+                  "source_version": iupac.get("metadata", {}).get("source_version"),
+              },
+              "ownership": {
+                  "canonical_element_owner": "chem-wiki M02 element_data",
+                  "canonical_species_reaction_owner": "chem-knowledge-data consolidated consumer release / chem-wiki knowledge_catalog",
+                  "role": "derived reference index only; contains references, ranks and reaction reversibility already present in canonical sources",
+              },
+              "content_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+          }
+          meta_path.write_text(
+              json.dumps(meta, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Commit refreshed teaching relation projection
+        shell: bash
+        run: |
+          git add backend/src/chem_wiki/modules/element_data/seeds/element-teaching-relations.jsonl
+          git add backend/src/chem_wiki/modules/element_data/seeds/element-teaching-relations.meta.json
+          if git diff --cached --quiet; then
+            echo "Element teaching relation projection is unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "data(element): snapshot teaching relation index"
+          git push
