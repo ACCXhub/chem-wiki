@@ -12,7 +12,9 @@ export interface CatalogSpecies {
   nameEn: string | null
   formula: string
   charge: number
+  composition: Record<string, number> | null
   aliases: string[]
+  chemicalClassifications: string[]
   primaryCategory: string
   tags: string[]
   defaultPriority: string
@@ -34,7 +36,30 @@ export interface CatalogSpeciesQuery {
   query?: string
   primaryCategory?: string
   equationMode: EquationMode
+  composition?: Record<string, number>
+  charge?: number
+  entityKind?: 'ion' | 'substance'
   limit?: number
+}
+
+export interface BuilderBlock {
+  id: string
+  label: string
+  formula: string
+  composition: Record<string, number>
+  charge: number
+  kind: 'element' | 'ion'
+}
+
+export interface BuilderTrayEntry {
+  block: BuilderBlock
+  count: number
+}
+
+export interface BuilderResolution {
+  composition: Record<string, number>
+  totalCharge: number
+  entityKind: 'ion' | 'substance'
 }
 
 export interface EquationTerm {

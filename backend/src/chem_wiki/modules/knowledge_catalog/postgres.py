@@ -1,6 +1,7 @@
 """PostgreSQL catalog query adapter for the bounded consolidated dataset."""
 
 import unicodedata
+from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -73,6 +74,9 @@ class PostgresCatalogReader:
         query: str = "",
         primary_category: str | None = None,
         equation_mode: str | None = None,
+        composition: dict[str, int] | None = None,
+        total_charge: int | None = None,
+        entity_kind: Literal["ion", "substance"] | None = None,
         limit: int = 20,
     ) -> list[CatalogSpeciesResult]:
         if not 1 <= limit <= 50:
@@ -93,6 +97,12 @@ class PostgresCatalogReader:
             tuple[int, int, int, str, CatalogSpeciesRow, CatalogTeachingProjectionRow]
         ] = []
         for species, projection in self._session.execute(statement):
+            if composition is not None and species.composition != composition:
+                continue
+            if total_charge is not None and species.charge != total_charge:
+                continue
+            if entity_kind is not None and species.entity_kind != entity_kind:
+                continue
             match_rank = _match_rank(species, projection, normalized_query)
             if match_rank is None:
                 continue
@@ -121,7 +131,9 @@ class PostgresCatalogReader:
                 name_en=species.name_en,
                 formula=species.formula,
                 charge=species.charge,
+                composition=species.composition,
                 aliases=species.aliases,
+                chemical_classifications=species.chemical_classifications,
                 primary_category=projection.primary_category,
                 tags=projection.tags,
                 default_priority=projection.default_priority,

@@ -29,6 +29,9 @@ export async function searchCatalogSpecies(
   const normalizedQuery = query.query?.trim()
   if (normalizedQuery) parameters.set('q', normalizedQuery)
   if (query.primaryCategory) parameters.set('primary_category', query.primaryCategory)
+  if (query.composition) parameters.set('composition', JSON.stringify(query.composition))
+  if (query.charge !== undefined) parameters.set('charge', String(query.charge))
+  if (query.entityKind) parameters.set('entity_kind', query.entityKind)
 
   const response = await fetch(`/v1/catalog/species?${parameters}`, {
     headers: { Accept: 'application/json' },

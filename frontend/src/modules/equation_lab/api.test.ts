@@ -57,3 +57,20 @@ test('queries the catalog with combined search, category and equation mode filte
     { headers: { Accept: 'application/json' }, signal: undefined },
   )
 })
+
+test('passes controlled composition resolution facts to the existing catalog endpoint', async () => {
+  const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await searchCatalogSpecies({
+    equationMode: 'ionic',
+    composition: { Na: 2, O: 4, S: 1 },
+    charge: 0,
+    entityKind: 'substance',
+  })
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/v1/catalog/species?equation_mode=ionic&limit=50&composition=%7B%22Na%22%3A2%2C%22O%22%3A4%2C%22S%22%3A1%7D&charge=0&entity_kind=substance',
+    { headers: { Accept: 'application/json' }, signal: undefined },
+  )
+})

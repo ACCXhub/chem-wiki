@@ -1,5 +1,7 @@
 """Minimal backend query boundary for the consolidated catalog."""
 
+import json
+import re
 from collections.abc import Iterator
 from functools import lru_cache
 from typing import Annotated, Literal, Protocol
@@ -21,6 +23,9 @@ class CatalogReader(Protocol):
         query: str = "",
         primary_category: str | None = None,
         equation_mode: str | None = None,
+        composition: dict[str, int] | None = None,
+        total_charge: int | None = None,
+        entity_kind: Literal["ion", "substance"] | None = None,
         limit: int = 20,
     ) -> list[CatalogSpeciesResult]: ...
 
@@ -40,6 +45,31 @@ def get_catalog_reader() -> Iterator[CatalogReader]:
 
 router = APIRouter(prefix="/v1/catalog", tags=["knowledge-catalog"])
 
+_ELEMENT_SYMBOL = re.compile(r"[A-Z][a-z]?")
+
+
+def _parse_composition(value: str | None) -> dict[str, int] | None:
+    if value is None:
+        return None
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise HTTPException(
+            status_code=422, detail="composition 必须是元素计数 JSON object"
+        ) from error
+    if not isinstance(payload, dict) or not payload:
+        raise HTTPException(status_code=422, detail="composition 必须包含至少一个元素")
+    if any(
+        not isinstance(element, str)
+        or _ELEMENT_SYMBOL.fullmatch(element) is None
+        or isinstance(count, bool)
+        or not isinstance(count, int)
+        or count <= 0
+        for element, count in payload.items()
+    ):
+        raise HTTPException(status_code=422, detail="composition 必须使用正整数元素计数")
+    return dict(sorted(payload.items()))
+
 
 @router.get("/species", response_model=list[CatalogSpeciesResult])
 def search_species(
@@ -47,12 +77,18 @@ def search_species(
     q: str = "",
     primary_category: str | None = None,
     equation_mode: Literal["molecular", "ionic", "net_ionic"] | None = None,
+    composition: str | None = None,
+    charge: int | None = None,
+    entity_kind: Literal["ion", "substance"] | None = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> list[CatalogSpeciesResult]:
     return reader.search_species(
         query=q,
         primary_category=primary_category,
         equation_mode=equation_mode,
+        composition=_parse_composition(composition),
+        total_charge=charge,
+        entity_kind=entity_kind,
         limit=limit,
     )
 

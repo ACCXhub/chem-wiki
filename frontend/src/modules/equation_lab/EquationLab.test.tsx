@@ -3,6 +3,7 @@ import { expect, test, vi } from 'vitest'
 
 import { EquationLabView } from './EquationLab'
 import type { BalanceEquationResponse, CatalogSpecies } from './types'
+import type { PeriodicTableElement } from '../periodic_table'
 
 
 const result: BalanceEquationResponse = {
@@ -45,7 +46,9 @@ function species(
     nameEn: null,
     formula,
     charge,
+    composition: formula === 'H2O' ? { H: 2, O: 1 } : { [formula.replace(/[0-9]/g, '')]: 1 },
     aliases: [],
+    chemicalClassifications: [],
     primaryCategory: charge > 0 ? 'cation' : charge < 0 ? 'anion' : 'elemental_substance',
     tags: [],
     defaultPriority: 'core',
@@ -149,4 +152,110 @@ test('keeps the already-balanced result state visible', async () => {
   fireEvent.click(screen.getByRole('button', { name: '配平并验证' }))
   expect(await screen.findByText('输入已经守恒')).toBeInTheDocument()
   expect(screen.getByText('不从配平结果推断机理')).toBeInTheDocument()
+})
+
+test('keeps direct catalog selection primary while exposing the controlled builder', async () => {
+  render(
+    <EquationLabView
+      onBack={() => undefined}
+      onBalance={() => Promise.resolve(result)}
+      onSearch={() => Promise.resolve(molecularCatalog)}
+    />,
+  )
+
+  await screen.findByText('氢气')
+  expect(screen.getByRole('button', { name: '搜索物种' })).toHaveAttribute('aria-pressed', 'true')
+  fireEvent.click(screen.getByRole('button', { name: '构建物种' }))
+  expect(screen.getByRole('heading', { name: '受控构建' })).toBeInTheDocument()
+})
+
+test('resolves controlled sodium and sulfate blocks to the existing catalog species and draft', async () => {
+  const sodium = { ...species('sodium', '钠离子', 'Na', 1), composition: { Na: 1 } }
+  const sulfate = { ...species('sulfate', '硫酸根离子', 'SO4', -2), composition: { S: 1, O: 4 } }
+  const sodiumSulfate = { ...species('sodium-sulfate', '硫酸钠', 'Na2SO4'), composition: { Na: 2, S: 1, O: 4 } }
+  const onSearch = vi.fn((request: { primaryCategory?: string; composition?: Record<string, number> }) => {
+    if (request.primaryCategory === 'cation') return Promise.resolve([sodium])
+    if (request.primaryCategory === 'anion') return Promise.resolve([sulfate])
+    if (request.composition) return Promise.resolve([sodiumSulfate])
+    return Promise.resolve(molecularCatalog)
+  })
+  render(
+    <EquationLabView
+      onBack={() => undefined}
+      onBalance={() => Promise.resolve(result)}
+      onSearch={onSearch}
+      onLoadElements={() => Promise.resolve([])}
+    />,
+  )
+
+  await screen.findByText('氢气')
+  fireEvent.click(screen.getByRole('button', { name: '构建物种' }))
+  expect(await screen.findByRole('button', { name: '添加钠离子' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '添加钠离子' }))
+  fireEvent.click(screen.getByRole('button', { name: '添加钠离子' }))
+  fireEvent.click(screen.getByRole('button', { name: '添加硫酸根离子' }))
+
+  expect(await screen.findByText('已找到 1 个已知物种。')).toBeInTheDocument()
+  await waitFor(() => expect(onSearch).toHaveBeenLastCalledWith({
+    composition: { Na: 2, O: 4, S: 1 },
+    charge: 0,
+    entityKind: 'substance',
+    equationMode: 'molecular',
+    limit: 50,
+  }, expect.any(AbortSignal)))
+  fireEvent.click(screen.getByRole('button', { name: '将硫酸钠添加到反应物' }))
+  expect(screen.getByRole('region', { name: '反应物' })).toHaveTextContent('硫酸钠')
+})
+
+test('shows multiple and no controlled composition matches without synthesizing a species', async () => {
+  const carbon: PeriodicTableElement = {
+    id: 'carbon', atomicNumber: 6, symbol: 'C', nameZh: '碳', nameEn: 'carbon', category: 'reactive-nonmetal', status: 'confirmed' as const,
+    layout: { period: 2, group: 14, row: 2, column: 14, block: 'p' as const },
+    properties: { electronegativity: { value: 2.5, unit: 'Pauling' }, firstIonizationEnergy: { value: 11.2, unit: 'eV' } },
+  }
+  const hydrogen = { ...carbon, id: 'hydrogen', atomicNumber: 1, symbol: 'H', nameZh: '氢', nameEn: 'hydrogen' }
+  const buteneOne = { ...species('butene-1', '1-丁烯', 'C4H8'), composition: { C: 4, H: 8 } }
+  const buteneTwo = { ...species('butene-2', '顺-2-丁烯', 'C4H8'), composition: { C: 4, H: 8 } }
+  const onSearch = vi.fn((request: { composition?: Record<string, number> }) => {
+    if (request.composition?.C === 4 && request.composition.H === 8) return Promise.resolve([buteneOne, buteneTwo])
+    if (request.composition) return Promise.resolve([])
+    return Promise.resolve(molecularCatalog)
+  })
+  render(
+    <EquationLabView
+      onBack={() => undefined}
+      onBalance={() => Promise.resolve(result)}
+      onSearch={onSearch}
+      onLoadElements={() => Promise.resolve([carbon, hydrogen])}
+    />,
+  )
+
+  await screen.findByText('氢气')
+  fireEvent.click(screen.getByRole('button', { name: '构建物种' }))
+  expect(await screen.findByRole('button', { name: '添加碳' })).toBeInTheDocument()
+  for (let count = 0; count < 4; count += 1) fireEvent.click(screen.getByRole('button', { name: '添加碳' }))
+  for (let count = 0; count < 8; count += 1) fireEvent.click(screen.getByRole('button', { name: '添加氢' }))
+  expect(await screen.findByText('已找到 2 个有效候选，请选择。')).toBeInTheDocument()
+  expect(screen.getByText('1-丁烯')).toBeInTheDocument()
+  expect(screen.getByText('顺-2-丁烯')).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: '增加氢' }))
+  expect(await screen.findByText('没有匹配的已知目录物种；不会创建新的物种 identity。')).toBeInTheDocument()
+})
+
+test('persists a direct palette favorite and recent use across reload', async () => {
+  window.localStorage.clear()
+  const first = render(
+    <EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={() => Promise.resolve(molecularCatalog)} />,
+  )
+  await screen.findByText('氢气')
+  fireEvent.click(screen.getByRole('button', { name: '收藏水' }))
+  fireEvent.click(screen.getByRole('button', { name: '将水添加到反应物' }))
+  first.unmount()
+
+  render(
+    <EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={() => Promise.resolve(molecularCatalog)} />,
+  )
+  expect(await screen.findByRole('button', { name: '取消收藏水' })).toBeInTheDocument()
+  expect(screen.getByText('最近')).toBeInTheDocument()
 })

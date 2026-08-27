@@ -23,7 +23,9 @@ class CatalogSpeciesResult(CatalogDto):
     name_en: str | None
     formula: str
     charge: int
+    composition: dict[str, int] | None
     aliases: list[str]
+    chemical_classifications: list[str]
     primary_category: str
     tags: list[str]
     default_priority: str
