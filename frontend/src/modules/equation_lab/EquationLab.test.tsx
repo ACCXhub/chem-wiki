@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { expect, test, vi } from 'vitest'
+import { beforeEach, expect, test, vi } from 'vitest'
 
 import { EquationLabView } from './EquationLab'
 import type { BalanceEquationResponse, CatalogSpecies } from './types'
@@ -67,21 +67,71 @@ const molecularCatalog = [
   species('h2o', '水', 'H2O'),
 ]
 
-test('composes H2 and O2 into H2O without typing a complete equation', async () => {
+beforeEach(() => window.localStorage.clear())
+
+function material(name: string, scope = document.body) {
+  return within(scope).getByRole('article', { name: `拖拽物质 ${name}` })
+}
+
+function addMaterial(name: string, side: 'reactants' | 'products', scope = document.body) {
+  const block = material(name, scope)
+  fireEvent.click(block)
+  fireEvent.click(within(block).getByRole('button', { name: side === 'reactants' ? '放入反应物' : '放入生成物' }))
+}
+
+function dragData() {
+  return { effectAllowed: '', dropEffect: '', setData: vi.fn(), setDragImage: vi.fn() }
+}
+
+test('drags H2 and O2 into reactants and H2O into products, then auto-balances', async () => {
   const onBalance = vi.fn(() => Promise.resolve(result))
   const onSearch = vi.fn(() => Promise.resolve(molecularCatalog))
   render(<EquationLabView onBack={() => undefined} onBalance={onBalance} onSearch={onSearch} />)
 
   await screen.findByText('氢气')
-  fireEvent.click(screen.getByRole('button', { name: '将氢气添加到反应物' }))
-  fireEvent.click(screen.getByRole('button', { name: '将氧气添加到反应物' }))
-  fireEvent.click(screen.getByRole('button', { name: '将水添加到生成物' }))
-  fireEvent.click(screen.getByRole('button', { name: '配平并验证' }))
+  expect(screen.getByRole('checkbox', { name: '自动配平ON' })).toBeChecked()
+  const reactants = screen.getByRole('region', { name: '反应物' })
+  const products = screen.getByRole('region', { name: '生成物' })
+  const dataTransfer = dragData()
 
-  expect(onBalance).toHaveBeenCalledWith('H2 + O2 -> H2O', 'molecular')
+  fireEvent.dragStart(material('氢气'), { dataTransfer })
+  fireEvent.dragOver(reactants, { dataTransfer })
+  expect(reactants).toHaveClass('is-drag-target')
+  fireEvent.drop(reactants, { dataTransfer })
+  fireEvent.dragStart(material('氧气'), { dataTransfer })
+  fireEvent.dragOver(reactants, { dataTransfer })
+  fireEvent.drop(reactants, { dataTransfer })
+  fireEvent.dragStart(material('水'), { dataTransfer })
+  fireEvent.dragOver(products, { dataTransfer })
+  fireEvent.drop(products, { dataTransfer })
+
+  await waitFor(() => expect(onBalance).toHaveBeenCalledWith('H2 + O2 -> H2O', 'molecular'))
   expect(await screen.findByText('2H₂ + O₂ → 2H₂O')).toBeInTheDocument()
   expect(screen.getByText('输入未配平，已求得最简整数比')).toBeInTheDocument()
   expect(screen.getAllByRole('cell', { name: '4' })).toHaveLength(2)
+})
+
+test('converges same-side duplicates and supports participant move, removal, and undo', async () => {
+  render(<EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={() => Promise.resolve(molecularCatalog)} />)
+
+  await screen.findByText('氢气')
+  addMaterial('氢气', 'reactants')
+  addMaterial('氢气', 'reactants')
+  addMaterial('氧气', 'reactants')
+  expect(screen.getAllByLabelText('氢气，点击编辑物态，双击移除')).toHaveLength(1)
+
+  const dataTransfer = dragData()
+  const oxygen = screen.getByLabelText('氧气，点击编辑物态，双击移除')
+  fireEvent.dragStart(oxygen, { dataTransfer })
+  fireEvent.drop(screen.getByRole('region', { name: '生成物' }), { dataTransfer })
+  expect(screen.getByRole('region', { name: '生成物' })).toHaveTextContent('氧气')
+  expect(screen.getByRole('region', { name: '反应物' })).not.toHaveTextContent('氧气')
+
+  const hydrogen = screen.getByLabelText('氢气，点击编辑物态，双击移除')
+  fireEvent.doubleClick(hydrogen)
+  expect(screen.queryByLabelText('氢气，点击编辑物态，双击移除')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '撤销' }))
+  expect(await screen.findByLabelText('氢气，点击编辑物态，双击移除')).toBeInTheDocument()
 })
 
 test('combines catalog search and category with the current equation mode', async () => {
@@ -100,7 +150,7 @@ test('combines catalog search and category with the current equation mode', asyn
     equationMode: 'ionic',
     limit: 50,
   }, expect.any(AbortSignal)))
-  const notation = document.querySelector('.species-row.kind-ion .chem-notation')
+  const notation = document.querySelector('.species-block.kind-ion .chem-notation')
   expect(notation).toHaveTextContent('SO₄2-')
 })
 
@@ -147,11 +197,52 @@ test('keeps the already-balanced result state visible', async () => {
   )
 
   await screen.findByText('氢气')
-  fireEvent.click(screen.getByRole('button', { name: '将氢气添加到反应物' }))
-  fireEvent.click(screen.getByRole('button', { name: '将水添加到生成物' }))
-  fireEvent.click(screen.getByRole('button', { name: '配平并验证' }))
+  addMaterial('氢气', 'reactants')
+  addMaterial('水', 'products')
   expect(await screen.findByText('输入已经守恒')).toBeInTheDocument()
   expect(screen.getByText('不从配平结果推断机理')).toBeInTheDocument()
+})
+
+test('stops automatic balancing when disabled while preserving explicit balancing', async () => {
+  const onBalance = vi.fn(() => Promise.resolve(result))
+  render(<EquationLabView onBack={() => undefined} onBalance={onBalance} onSearch={() => Promise.resolve(molecularCatalog)} />)
+
+  await screen.findByText('氢气')
+  fireEvent.click(screen.getByRole('checkbox', { name: '自动配平ON' }))
+  expect(screen.getByRole('checkbox', { name: '自动配平OFF' })).not.toBeChecked()
+  await screen.findByRole('article', { name: '拖拽物质 氧气' })
+  addMaterial('氢气', 'reactants')
+  addMaterial('氧气', 'reactants')
+  addMaterial('水', 'products')
+  await new Promise((resolve) => window.setTimeout(resolve, 340))
+  expect(onBalance).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '配平' }))
+  await waitFor(() => expect(onBalance).toHaveBeenCalledWith('H2 + O2 -> H2O', 'molecular'))
+})
+
+test('does not let an older automatic balance response replace a newer draft', async () => {
+  let resolveFirst: (value: BalanceEquationResponse) => void = () => undefined
+  let resolveSecond: (value: BalanceEquationResponse) => void = () => undefined
+  const onBalance = vi.fn()
+    .mockImplementationOnce(() => new Promise<BalanceEquationResponse>((resolve) => { resolveFirst = resolve }))
+    .mockImplementationOnce(() => new Promise<BalanceEquationResponse>((resolve) => { resolveSecond = resolve }))
+  render(<EquationLabView onBack={() => undefined} onBalance={onBalance} onSearch={() => Promise.resolve(molecularCatalog)} />)
+
+  await screen.findByText('氢气')
+  addMaterial('氢气', 'reactants')
+  addMaterial('氧气', 'reactants')
+  addMaterial('水', 'products')
+  await waitFor(() => expect(onBalance).toHaveBeenCalledTimes(1))
+
+  fireEvent.click(screen.getByLabelText('氢气，点击编辑物态，双击移除'))
+  await new Promise((resolve) => window.setTimeout(resolve, 200))
+  fireEvent.click(screen.getByRole('button', { name: '(g)' }))
+  resolveFirst(result)
+  await Promise.resolve()
+  expect(screen.queryByLabelText('配平结果')).not.toBeInTheDocument()
+  await waitFor(() => expect(onBalance).toHaveBeenCalledWith('H2(g) + O2 -> H2O', 'molecular'))
+  resolveSecond(result)
+  expect(await screen.findByLabelText('配平结果')).toHaveTextContent('2H₂ + O₂ → 2H₂O')
 })
 
 test('keeps direct catalog selection primary while exposing the controlled builder', async () => {
@@ -164,8 +255,8 @@ test('keeps direct catalog selection primary while exposing the controlled build
   )
 
   await screen.findByText('氢气')
-  expect(screen.getByRole('button', { name: '搜索物种' })).toHaveAttribute('aria-pressed', 'true')
-  fireEvent.click(screen.getByRole('button', { name: '构建物种' }))
+  expect(screen.getByRole('button', { name: '搜索物质' })).toHaveAttribute('aria-pressed', 'true')
+  fireEvent.click(screen.getByRole('button', { name: '构建物质' }))
   expect(screen.getByRole('heading', { name: '受控构建' })).toBeInTheDocument()
 })
 
@@ -189,13 +280,13 @@ test('resolves controlled sodium and sulfate blocks to the existing catalog spec
   )
 
   await screen.findByText('氢气')
-  fireEvent.click(screen.getByRole('button', { name: '构建物种' }))
+  fireEvent.click(screen.getByRole('button', { name: '构建物质' }))
   expect(await screen.findByRole('button', { name: '添加钠离子' })).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '添加钠离子' }))
   fireEvent.click(screen.getByRole('button', { name: '添加钠离子' }))
   fireEvent.click(screen.getByRole('button', { name: '添加硫酸根离子' }))
 
-  expect(await screen.findByText('已找到 1 个已知物种。')).toBeInTheDocument()
+  expect(await screen.findByText('已找到 1 个已知物质。')).toBeInTheDocument()
   await waitFor(() => expect(onSearch).toHaveBeenLastCalledWith({
     composition: { Na: 2, O: 4, S: 1 },
     charge: 0,
@@ -203,7 +294,10 @@ test('resolves controlled sodium and sulfate blocks to the existing catalog spec
     equationMode: 'molecular',
     limit: 50,
   }, expect.any(AbortSignal)))
-  fireEvent.click(screen.getByRole('button', { name: '将硫酸钠添加到反应物' }))
+  const dataTransfer = dragData()
+  fireEvent.dragStart(material('硫酸钠'), { dataTransfer })
+  fireEvent.dragOver(screen.getByRole('region', { name: '反应物' }), { dataTransfer })
+  fireEvent.drop(screen.getByRole('region', { name: '反应物' }), { dataTransfer })
   expect(screen.getByRole('region', { name: '反应物' })).toHaveTextContent('硫酸钠')
 })
 
@@ -231,7 +325,7 @@ test('shows multiple and no controlled composition matches without synthesizing 
   )
 
   await screen.findByText('氢气')
-  fireEvent.click(screen.getByRole('button', { name: '构建物种' }))
+  fireEvent.click(screen.getByRole('button', { name: '构建物质' }))
   expect(await screen.findByRole('button', { name: '添加碳' })).toBeInTheDocument()
   for (let count = 0; count < 4; count += 1) fireEvent.click(screen.getByRole('button', { name: '添加碳' }))
   for (let count = 0; count < 8; count += 1) fireEvent.click(screen.getByRole('button', { name: '添加氢' }))
@@ -240,7 +334,7 @@ test('shows multiple and no controlled composition matches without synthesizing 
   expect(screen.getByText('顺-2-丁烯')).toBeInTheDocument()
 
   fireEvent.click(screen.getByRole('button', { name: '增加氢' }))
-  expect(await screen.findByText('没有匹配的已知目录物种；不会创建新的物种 identity。')).toBeInTheDocument()
+  expect(await screen.findByText('没有匹配的已知目录物质；不会创建新的物质 identity。')).toBeInTheDocument()
 })
 
 test('persists a direct palette favorite and recent use across reload', async () => {
@@ -250,7 +344,7 @@ test('persists a direct palette favorite and recent use across reload', async ()
   )
   await screen.findByText('氢气')
   fireEvent.click(screen.getByRole('button', { name: '收藏水' }))
-  fireEvent.click(screen.getByRole('button', { name: '将水添加到反应物' }))
+  addMaterial('水', 'reactants')
   first.unmount()
 
   render(
@@ -276,7 +370,7 @@ test('hydrates saved long-tail favorites and recents separately from the default
   fireEvent.change(screen.getByRole('searchbox'), { target: { value: '甲苯' } })
   await screen.findByText('甲苯')
   fireEvent.click(screen.getByRole('button', { name: '收藏甲苯' }))
-  fireEvent.click(screen.getByRole('button', { name: '将甲苯添加到反应物' }))
+  addMaterial('甲苯', 'reactants')
   first.unmount()
 
   const second = render(
@@ -287,7 +381,7 @@ test('hydrates saved long-tail favorites and recents separately from the default
   expect(within(quickAccess).getByText('收藏')).toBeInTheDocument()
   fireEvent.click(within(quickAccess).getByRole('button', { name: '从收藏移除甲苯' }))
   expect(await within(quickAccess).findByText('最近')).toBeInTheDocument()
-  fireEvent.click(within(quickAccess).getByRole('button', { name: '将甲苯添加到生成物' }))
+  addMaterial('甲苯', 'products', quickAccess)
   expect(screen.getByRole('region', { name: '生成物' })).toHaveTextContent('甲苯')
   expect(window.localStorage.getItem('chem-wiki.equation-lab.palette-preferences.v1'))
     .toBe(JSON.stringify({ version: 1, favorites: [], recents: ['long-tail'] }))

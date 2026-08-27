@@ -42,7 +42,7 @@ export async function searchCatalogSpecies(
   })
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as ErrorPayload | null
-    throw apiError(payload, response.status, '物种目录加载失败')
+    throw apiError(payload, response.status, '物质库加载失败')
   }
   return (await response.json()) as CatalogSpecies[]
 }

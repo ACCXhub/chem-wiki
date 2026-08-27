@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react'
 
 import { loadPeriodicTableElements } from '../periodic_table'
 import { balanceEquation, searchCatalogSpecies } from './api'
 import ChemistryNotation from './ChemistryNotation'
+import SpeciesBlock from './palette/SpeciesBlock'
+import EquationWorkbench, { type DraftSide, type DragTarget } from './workbench/EquationWorkbench'
 import {
   addParticipant,
   addBuilderBlock,
   adjustBuilderBlock,
   canSubmitDraft,
   clearBuilderTray,
-  moveParticipant,
   resolveBuilderTray,
   serializeEquationDraft,
   updateParticipantPhase,
@@ -30,7 +31,6 @@ import type {
   EquationDraft,
   EquationDraftParticipant,
   EquationMode,
-  EquationPhase,
 } from './types'
 import type { PeriodicTableElement } from '../periodic_table'
 import './equation-lab.css'
@@ -40,8 +40,16 @@ interface EquationLabProps {
   onBack: () => void
 }
 
-type DraftSide = 'reactants' | 'products'
 type PaletteMode = 'search' | 'builder'
+type DraggedItem =
+  | { kind: 'species'; species: CatalogSpecies }
+  | { kind: 'participant'; side: DraftSide; applicationId: string }
+
+interface DraftHistory {
+  past: EquationDraft[]
+  present: EquationDraft
+  future: EquationDraft[]
+}
 
 type SearchSpecies = (
   query: CatalogSpeciesQuery,
@@ -94,18 +102,25 @@ const CATEGORY_OPTIONS = [
   ['other', '其他'],
 ] as const
 
-const SUITABILITY_LABELS = {
-  recommended: '推荐',
-  available: '可用',
-  deemphasized: '非典型',
-} as const
-
 const EXACT_LOOKUP_BATCH_SIZE = 50
 
 const EMPTY_DRAFT: EquationDraft = {
   mode: 'molecular',
   reactants: [],
   products: [],
+}
+
+const HISTORY_LIMIT = 40
+
+function sameDraft(left: EquationDraft, right: EquationDraft) {
+  if (left.mode !== right.mode) return false
+  return (['reactants', 'products'] as const).every((side) => (
+    left[side].length === right[side].length
+    && left[side].every((participant, index) => (
+      participant.applicationId === right[side][index]?.applicationId
+      && participant.phase === right[side][index]?.phase
+    ))
+  ))
 }
 
 const COMMON_ELEMENT_SYMBOLS = new Set([
@@ -141,7 +156,8 @@ export function EquationLabView({
   onSearch = searchCatalogSpecies,
   onLoadElements = loadPeriodicTableElements,
 }: EquationLabViewProps) {
-  const [draft, setDraft] = useState<EquationDraft>(EMPTY_DRAFT)
+  const [history, setHistory] = useState<DraftHistory>({ past: [], present: EMPTY_DRAFT, future: [] })
+  const draft = history.present
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('')
   const [catalog, setCatalog] = useState<CatalogSpecies[]>([])
@@ -163,6 +179,11 @@ export function EquationLabView({
   const [result, setResult] = useState<BalanceEquationResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [autoBalance, setAutoBalance] = useState(true)
+  const [draggedItem, setDraggedItem] = useState<DraggedItem | null>(null)
+  const [dragTarget, setDragTarget] = useState<DragTarget | null>(null)
+  const [duplicatePulse, setDuplicatePulse] = useState<string | null>(null)
+  const balanceRequestId = useRef(0)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -179,7 +200,7 @@ export function EquationLabView({
         .catch((reason: unknown) => {
           if (reason instanceof DOMException && reason.name === 'AbortError') return
           setCatalog([])
-          setCatalogError(reason instanceof Error ? reason.message : '物种目录加载失败')
+          setCatalogError(reason instanceof Error ? reason.message : '物质库加载失败')
         })
         .finally(() => {
           if (!controller.signal.aborted) setCatalogLoading(false)
@@ -287,7 +308,7 @@ export function EquationLabView({
     }).catch((reason: unknown) => {
       if (!controller.signal.aborted) {
         setBuilderMatches([])
-        setBuilderError(reason instanceof Error ? reason.message : '已知物种匹配失败')
+        setBuilderError(reason instanceof Error ? reason.message : '已知物质匹配失败')
       }
     }).finally(() => {
       if (!controller.signal.aborted) setBuilderLoading(false)
@@ -310,18 +331,30 @@ export function EquationLabView({
     [preferences.favorites, preferences.recents, quickAccessSpecies, savedApplicationIds.length],
   )
 
-  const runBalance = async (equation: string, mode: EquationMode) => {
+  const invalidateBalance = useCallback(() => {
+    balanceRequestId.current += 1
+    setResult(null)
+    setError(null)
+    setLoading(false)
+  }, [])
+
+  const runBalance = useCallback(async (equation: string, mode: EquationMode) => {
+    const requestId = balanceRequestId.current + 1
+    balanceRequestId.current = requestId
     setLoading(true)
     setError(null)
     setResult(null)
     try {
-      setResult(await onBalance(equation, mode))
+      const response = await onBalance(equation, mode)
+      if (requestId === balanceRequestId.current) setResult(response)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '方程式处理失败')
+      if (requestId === balanceRequestId.current) {
+        setError(reason instanceof Error ? reason.message : '方程式处理失败')
+      }
     } finally {
-      setLoading(false)
+      if (requestId === balanceRequestId.current) setLoading(false)
     }
-  }
+  }, [onBalance])
 
   const handleComposerSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -338,20 +371,32 @@ export function EquationLabView({
   const chooseExample = (example: (typeof EXAMPLES)[number]) => {
     setDirectEquation(example.equation)
     setDirectMode(example.mode)
-    setResult(null)
-    setError(null)
+    invalidateBalance()
   }
 
-  const changeSide = (
-    side: DraftSide,
-    update: (participants: EquationDraftParticipant[]) => EquationDraftParticipant[],
-  ) => {
-    setDraft((current) => ({ ...current, [side]: update(current[side]) }))
-    setResult(null)
-    setError(null)
+  const commitDraft = useCallback((update: (current: EquationDraft) => EquationDraft) => {
+    setHistory((current) => {
+      const next = update(current.present)
+      if (sameDraft(current.present, next)) return current
+      return {
+        past: [...current.past, current.present].slice(-HISTORY_LIMIT),
+        present: next,
+        future: [],
+      }
+    })
+    invalidateBalance()
+  }, [invalidateBalance])
+
+  const changeSide = (side: DraftSide, update: (participants: EquationDraftParticipant[]) => EquationDraftParticipant[]) => {
+    commitDraft((current) => ({ ...current, [side]: update(current[side]) }))
   }
 
   const addToSide = (side: DraftSide, species: CatalogSpecies) => {
+    if (draft[side].some((participant) => participant.applicationId === species.applicationId)) {
+      setDuplicatePulse(`${side}:${species.applicationId}`)
+      window.setTimeout(() => setDuplicatePulse(null), 360)
+      return
+    }
     changeSide(side, (participants) => addParticipant(participants, species))
     setPreferences((current) => {
       const next = recordPaletteRecent(current, species.applicationId)
@@ -368,6 +413,126 @@ export function EquationLabView({
     })
   }
 
+  const changeMode = (mode: EquationMode) => commitDraft((current) => ({ ...current, mode }))
+
+  const undo = useCallback(() => {
+    setHistory((current) => {
+      const previous = current.past.at(-1)
+      if (!previous) return current
+      return { past: current.past.slice(0, -1), present: previous, future: [current.present, ...current.future] }
+    })
+    invalidateBalance()
+  }, [invalidateBalance])
+
+  const redo = useCallback(() => {
+    setHistory((current) => {
+      const next = current.future[0]
+      if (!next) return current
+      return { past: [...current.past, current.present].slice(-HISTORY_LIMIT), present: next, future: current.future.slice(1) }
+    })
+    invalidateBalance()
+  }, [invalidateBalance])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z') return
+      const target = event.target as HTMLElement | null
+      if (target?.closest('input, textarea, select')) return
+      event.preventDefault()
+      if (event.shiftKey) redo()
+      else undo()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [redo, undo])
+
+  const getMagneticTarget = (event: DragEvent<HTMLElement>): DragTarget | null => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) return null
+    return { side: event.clientX < bounds.left + bounds.width / 2 ? 'reactants' : 'products' }
+  }
+
+  const handleWorkbenchDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!draggedItem) return
+    const target = getMagneticTarget(event)
+    if (!target) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = draggedItem.kind === 'species' ? 'copy' : 'move'
+    setDragTarget(target)
+  }
+
+  const handleParticipantDragOver = (event: DragEvent<HTMLElement>, target: DragTarget) => {
+    if (!draggedItem) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = draggedItem.kind === 'species' ? 'copy' : 'move'
+    setDragTarget(target)
+  }
+
+  const handleWorkbenchDragLeave = (event: DragEvent<HTMLElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragTarget(null)
+  }
+
+  const moveParticipantTo = (sourceSide: DraftSide, applicationId: string, target: DragTarget) => {
+    commitDraft((current) => {
+      const sourceIndex = current[sourceSide].findIndex((participant) => participant.applicationId === applicationId)
+      if (sourceIndex < 0) return current
+      const participant = current[sourceSide][sourceIndex]
+      const targetItems = current[target.side]
+      if (target.side !== sourceSide && targetItems.some((item) => item.applicationId === applicationId)) {
+        return { ...current, [sourceSide]: current[sourceSide].filter((item) => item.applicationId !== applicationId) }
+      }
+      const nextSource = current[sourceSide].filter((item) => item.applicationId !== applicationId)
+      const nextTargetBase = target.side === sourceSide ? nextSource : targetItems
+      let insertion = target.index ?? nextTargetBase.length
+      if (target.side === sourceSide && insertion > sourceIndex) insertion -= 1
+      insertion = Math.max(0, Math.min(insertion, nextTargetBase.length))
+      const nextTarget = [...nextTargetBase.slice(0, insertion), participant, ...nextTargetBase.slice(insertion)]
+      return target.side === sourceSide
+        ? { ...current, [sourceSide]: nextTarget }
+        : { ...current, [sourceSide]: nextSource, [target.side]: nextTarget }
+    })
+  }
+
+  const handleDrop = (event: DragEvent<HTMLElement>, preferredTarget?: DragTarget) => {
+    if (!draggedItem) return
+    event.preventDefault()
+    const target = preferredTarget ?? getMagneticTarget(event)
+    if (!target) return
+    if (draggedItem.kind === 'species') addToSide(target.side, draggedItem.species)
+    else moveParticipantTo(draggedItem.side, draggedItem.applicationId, target)
+    setDraggedItem(null)
+    setDragTarget(null)
+  }
+
+  const clearDrag = () => {
+    setDraggedItem(null)
+    setDragTarget(null)
+  }
+
+  const autoScrollPalette = (event: DragEvent<HTMLDivElement>) => {
+    if (!draggedItem) return
+    const element = event.currentTarget
+    const bounds = element.getBoundingClientRect()
+    const edge = 44
+    if (event.clientY < bounds.top + edge) element.scrollTop -= 10
+    if (event.clientY > bounds.bottom - edge) element.scrollTop += 10
+  }
+
+  const copyEquation = async () => {
+    const text = result?.formattedEquation ?? serializeEquationDraft(draft)
+    if (!text) return
+    await navigator.clipboard.writeText(text)
+  }
+
+  useEffect(() => {
+    if (!autoBalance || !canSubmitDraft(draft)) return
+    const equation = serializeEquationDraft(draft)
+    const timer = window.setTimeout(() => {
+      void runBalance(equation, draft.mode)
+    }, 280)
+    return () => window.clearTimeout(timer)
+  }, [autoBalance, draft, runBalance])
+
   return (
     <main className="equation-lab-page">
       <nav className="lab-breadcrumb" aria-label="面包屑导航">
@@ -380,84 +545,47 @@ export function EquationLabView({
         <div>
           <p className="eyebrow">M05 · Equation Composer</p>
           <h1>方程实验室</h1>
-          <p>从课程物种目录选择反应物与生成物，再交给守恒引擎配平。</p>
+          <p>从课程物质库选择反应物与生成物，再交给守恒引擎配平。</p>
         </div>
         <span className="engine-boundary">Catalog draft → M05 balance</span>
       </header>
 
-      <form className="composer-panel" onSubmit={handleComposerSubmit}>
-        <div className="composer-toolbar">
-          <div className="mode-switcher" role="group" aria-label="方程式模式">
-            {Object.entries(MODE_LABELS).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={draft.mode === value}
-                onClick={() => {
-                  setDraft((current) => ({ ...current, mode: value as EquationMode }))
-                  setResult(null)
-                  setError(null)
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <button
-            className="clear-draft"
-            type="button"
-            onClick={() => {
-              setDraft((current) => ({ ...current, reactants: [], products: [] }))
-              setResult(null)
-              setError(null)
-            }}
-            disabled={!draft.reactants.length && !draft.products.length}
-          >
-            清空草稿
-          </button>
-        </div>
+      <EquationWorkbench
+        draft={draft}
+        result={result}
+        error={error}
+        loading={loading}
+        autoBalance={autoBalance}
+        dragTarget={dragTarget}
+        duplicatePulse={duplicatePulse}
+        canUndo={history.past.length > 0}
+        canRedo={history.future.length > 0}
+        onSubmit={handleComposerSubmit}
+        onModeChange={changeMode}
+        onAutoBalanceChange={setAutoBalance}
+        onClearDraft={() => commitDraft((current) => ({ ...current, reactants: [], products: [] }))}
+        onUndo={undo}
+        onRedo={redo}
+        onCopy={copyEquation}
+        onClearSide={(side) => changeSide(side, () => [])}
+        onRemove={(side, id) => changeSide(side, (items) => items.filter((item) => item.applicationId !== id))}
+        onPhase={(side, id, phase) => changeSide(side, (items) => updateParticipantPhase(items, id, phase))}
+        onWorkbenchDragOver={handleWorkbenchDragOver}
+        onWorkbenchDragLeave={handleWorkbenchDragLeave}
+        onParticipantDragOver={handleParticipantDragOver}
+        onParticipantDragStart={(side, applicationId) => setDraggedItem({ kind: 'participant', side, applicationId })}
+        onDrop={handleDrop}
+        onDragEnd={clearDrag}
+      />
 
-        <div className="equation-composer" aria-label="结构化方程式草稿">
-          <DraftSidePanel
-            title="反应物"
-            participants={draft.reactants}
-            onClear={() => changeSide('reactants', () => [])}
-            onRemove={(id) => changeSide('reactants', (items) => items.filter((item) => item.applicationId !== id))}
-            onMove={(index, direction) => changeSide('reactants', (items) => moveParticipant(items, index, direction))}
-            onPhase={(id, phase) => changeSide('reactants', (items) => updateParticipantPhase(items, id, phase))}
-          />
-          <div className="composer-arrow" aria-label="生成">→</div>
-          <DraftSidePanel
-            title="生成物"
-            participants={draft.products}
-            onClear={() => changeSide('products', () => [])}
-            onRemove={(id) => changeSide('products', (items) => items.filter((item) => item.applicationId !== id))}
-            onMove={(index, direction) => changeSide('products', (items) => moveParticipant(items, index, direction))}
-            onPhase={(id, phase) => changeSide('products', (items) => updateParticipantPhase(items, id, phase))}
-          />
-        </div>
-
-        <div className="composer-actions">
-          <p>
-            {draft.mode === 'net_ionic' && draft.reactants.length && !draft.products.length
-              ? '净离子模式允许仅提交反应物，以检查“无净离子反应”状态。'
-              : '选择物种后可设置物态；方程字符串由草稿自动生成。'}
-          </p>
-          <button className="lab-submit" type="submit" disabled={loading || !canSubmitDraft(draft)}>
-            {loading ? '正在计算…' : '配平并验证'}
-          </button>
-        </div>
-      </form>
-
-      <div className="equation-workspace">
-        <section className="species-palette" aria-labelledby="palette-heading">
+      <section className="species-palette" aria-labelledby="palette-heading">
           <div className="lab-heading compact">
-            <div><p className="eyebrow">Species catalog</p><h2 id="palette-heading">物种目录</h2></div>
+            <div><p className="eyebrow">Known materials</p><h2 id="palette-heading">物质库</h2></div>
             <span>{catalogLoading ? '查询中…' : `${catalog.length} 项`}</span>
           </div>
-          <div className="palette-mode-switch" role="group" aria-label="物种选择方式">
-            <button type="button" aria-pressed={paletteMode === 'search'} onClick={() => setPaletteMode('search')}>搜索物种</button>
-            <button type="button" aria-pressed={paletteMode === 'builder'} onClick={() => setPaletteMode('builder')}>构建物种</button>
+          <div className="palette-mode-switch" role="group" aria-label="物质选择方式">
+            <button type="button" aria-pressed={paletteMode === 'search'} onClick={() => setPaletteMode('search')}>搜索物质</button>
+            <button type="button" aria-pressed={paletteMode === 'builder'} onClick={() => setPaletteMode('builder')}>构建物质</button>
           </div>
           {paletteMode === 'search' ? <>
             <label className="species-search">
@@ -469,7 +597,7 @@ export function EquationLabView({
                 placeholder="例如：硫酸根 / sulfate / SO4"
               />
             </label>
-            <div className="category-nav" aria-label="物种分类">
+            <div className="category-nav" aria-label="物质分类">
               {CATEGORY_OPTIONS.map(([value, label]) => (
               <button
                 key={value || 'all'}
@@ -487,47 +615,42 @@ export function EquationLabView({
                   <QuickAccessGroup
                     title="收藏"
                     species={favoriteSpecies}
-                    mode={draft.mode}
                     onAddToSide={addToSide}
                     onRemoveFavorite={toggleFavorite}
+                    onDragStart={(species) => setDraggedItem({ kind: 'species', species })}
+                    onDragEnd={clearDrag}
                   />
                 ) : null}
                 {recentSpecies.length ? (
                   <QuickAccessGroup
                     title="最近"
                     species={recentSpecies}
-                    mode={draft.mode}
                     onAddToSide={addToSide}
+                    onDragStart={(species) => setDraggedItem({ kind: 'species', species })}
+                    onDragEnd={clearDrag}
                   />
                 ) : null}
               </section>
             ) : null}
             {catalogError ? <div className="catalog-state is-error" role="alert">{catalogError}</div> : null}
             {!catalogError && !catalogLoading && !catalog.length ? (
-              <div className="catalog-state">没有匹配当前搜索与分类的物种。</div>
+              <div className="catalog-state">没有匹配当前搜索与分类的物质。</div>
             ) : null}
-            <div className="species-list" aria-live="polite">
+            <div className="species-list" aria-live="polite" onDragOver={autoScrollPalette}>
               {catalog.map((species) => {
-              const suitability = species.equationModes[draft.mode]
               const isFavorite = preferences.favorites.includes(species.applicationId)
               const isRecent = preferences.recents.includes(species.applicationId)
               return (
-                <article
+                <SpeciesBlock
                   key={species.consolidatedId}
-                  className={`species-row kind-${species.entityKind} suitability-${suitability}`}
-                >
-                  <div className="species-identity">
-                    <ChemistryNotation formula={species.formula} charge={species.charge} />
-                    <span><strong>{species.nameZh}</strong><small>{species.nameEn}</small></span>
-                  </div>
-                  <span className="suitability-label">{SUITABILITY_LABELS[suitability]}</span>
-                  <div className="species-add-actions">
-                    <button type="button" className="species-favorite" aria-pressed={isFavorite} onClick={() => toggleFavorite(species)} aria-label={`${isFavorite ? '取消收藏' : '收藏'}${species.nameZh}`}>{isFavorite ? '★ 收藏' : '☆ 收藏'}</button>
-                    <button type="button" onClick={() => addToSide('reactants', species)} aria-label={`将${species.nameZh}添加到反应物`}>+ 反应物</button>
-                    <button type="button" onClick={() => addToSide('products', species)} aria-label={`将${species.nameZh}添加到生成物`}>+ 生成物</button>
-                    {isRecent ? <span className="recent-label">最近</span> : null}
-                  </div>
-                </article>
+                  species={species}
+                  isFavorite={isFavorite}
+                  isRecent={isRecent}
+                  onFavorite={toggleFavorite}
+                  onAddToSide={addToSide}
+                  onDragStart={(item) => setDraggedItem({ kind: 'species', species: item })}
+                  onDragEnd={clearDrag}
+                />
               )
               })}
             </div>
@@ -546,20 +669,10 @@ export function EquationLabView({
             onAdjustBlock={(id, delta) => setBuilderTray((current) => adjustBuilderBlock(current, id, delta))}
             onClear={() => setBuilderTray(clearBuilderTray())}
             onAddToSide={addToSide}
+            onDragStart={(species) => setDraggedItem({ kind: 'species', species })}
+            onDragEnd={clearDrag}
           />}
-        </section>
-
-        <section className="lab-result" aria-labelledby="result-heading">
-          <div className="lab-heading compact">
-            <div><p className="eyebrow">Conservation</p><h2 id="result-heading">配平与守恒</h2></div>
-          </div>
-          {error ? <div className="lab-error" role="alert"><strong>无法配平</strong><p>{error}</p></div> : null}
-          {!result && !error ? (
-            <div className="lab-empty"><span>→</span><p>提交结构化草稿后，这里显示最简系数和守恒明细。</p></div>
-          ) : null}
-          {result ? <EquationResult result={result} /> : null}
-        </section>
-      </div>
+      </section>
 
       <details className="advanced-equation-input">
         <summary>高级：直接输入完整方程式</summary>
@@ -594,7 +707,7 @@ export function EquationLabView({
       </details>
 
       <p className="lab-scope-note">
-        此处只组合已知物种并调用 M05 守恒引擎；不预测生成物，不执行原子映射、键变化或机理推断。
+        此处只组合已知物质并调用 M05 守恒引擎；不预测生成物，不执行原子映射、键变化或机理推断。
       </p>
     </main>
   )
@@ -603,117 +716,40 @@ export function EquationLabView({
 interface QuickAccessGroupProps {
   title: string
   species: CatalogSpecies[]
-  mode: EquationMode
   onAddToSide: (side: DraftSide, species: CatalogSpecies) => void
   onRemoveFavorite?: (species: CatalogSpecies) => void
+  onDragStart: (species: CatalogSpecies) => void
+  onDragEnd: () => void
 }
 
 function QuickAccessGroup({
   title,
   species,
-  mode,
   onAddToSide,
   onRemoveFavorite,
+  onDragStart,
+  onDragEnd,
 }: QuickAccessGroupProps) {
   return (
     <div className="quick-access-group">
       <h3>{title}</h3>
       <div className="quick-access-list">
         {species.map((item) => {
-          const suitability = item.equationModes[mode]
           return (
-            <article
+            <SpeciesBlock
               key={item.applicationId}
-              className={`species-row kind-${item.entityKind} suitability-${suitability}`}
-            >
-              <div className="species-identity">
-                <ChemistryNotation formula={item.formula} charge={item.charge} />
-                <span><strong>{item.nameZh}</strong><small>{item.nameEn}</small></span>
-              </div>
-              <span className="suitability-label">{SUITABILITY_LABELS[suitability]}</span>
-              <div className="species-add-actions">
-                {onRemoveFavorite ? (
-                  <button
-                    type="button"
-                    className="species-favorite"
-                    onClick={() => onRemoveFavorite(item)}
-                    aria-label={`从收藏移除${item.nameZh}`}
-                  >
-                    ★ 收藏
-                  </button>
-                ) : null}
-                <button type="button" onClick={() => onAddToSide('reactants', item)} aria-label={`将${item.nameZh}添加到反应物`}>+ 反应物</button>
-                <button type="button" onClick={() => onAddToSide('products', item)} aria-label={`将${item.nameZh}添加到生成物`}>+ 生成物</button>
-              </div>
-            </article>
+              species={item}
+              isFavorite={Boolean(onRemoveFavorite)}
+              favoriteLabel={onRemoveFavorite ? `从收藏移除${item.nameZh}` : undefined}
+              onFavorite={onRemoveFavorite}
+              onAddToSide={onAddToSide}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+            />
           )
         })}
       </div>
     </div>
-  )
-}
-
-interface DraftSidePanelProps {
-  title: string
-  participants: EquationDraftParticipant[]
-  onClear: () => void
-  onRemove: (applicationId: string) => void
-  onMove: (index: number, direction: -1 | 1) => void
-  onPhase: (applicationId: string, phase: EquationPhase | null) => void
-}
-
-function DraftSidePanel({
-  title,
-  participants,
-  onClear,
-  onRemove,
-  onMove,
-  onPhase,
-}: DraftSidePanelProps) {
-  return (
-    <section className="draft-side" aria-label={title}>
-      <header>
-        <h2>{title}</h2>
-        <button type="button" onClick={onClear} disabled={!participants.length}>清空</button>
-      </header>
-      {!participants.length ? <p className="draft-placeholder">从物种目录添加</p> : null}
-      <div className="draft-participants">
-        {participants.map((participant, index) => (
-          <div key={participant.applicationId} className={`draft-participant kind-${participant.entityKind}`}>
-            <div className="draft-species-main">
-              <ChemistryNotation formula={participant.formula} charge={participant.charge} phase={participant.phase} />
-              <span>{participant.nameZh}</span>
-              <button type="button" onClick={() => onRemove(participant.applicationId)} aria-label={`移除${participant.nameZh}`}>×</button>
-            </div>
-            <div className="draft-species-controls">
-              <label>
-                <span>物态</span>
-                <select
-                  aria-label={`${participant.nameZh}的物态`}
-                  value={participant.phase ?? ''}
-                  onChange={(event) => onPhase(
-                    participant.applicationId,
-                    (event.target.value || null) as EquationPhase | null,
-                  )}
-                >
-                  <option value="">未指定</option>
-                  <option value="aq">aq</option>
-                  <option value="s">s</option>
-                  <option value="l">l</option>
-                  <option value="g">g</option>
-                </select>
-              </label>
-              {participants.length > 1 ? (
-                <span className="reorder-actions">
-                  <button type="button" onClick={() => onMove(index, -1)} disabled={index === 0} aria-label={`${participant.nameZh}前移`}>←</button>
-                  <button type="button" onClick={() => onMove(index, 1)} disabled={index === participants.length - 1} aria-label={`${participant.nameZh}后移`}>→</button>
-                </span>
-              ) : null}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
   )
 }
 
@@ -732,6 +768,8 @@ interface SpeciesBuilderProps {
   onAdjustBlock: (id: string, delta: -1 | 1) => void
   onClear: () => void
   onAddToSide: (side: DraftSide, species: CatalogSpecies) => void
+  onDragStart: (species: CatalogSpecies) => void
+  onDragEnd: () => void
 }
 
 function SpeciesBuilder({
@@ -749,6 +787,8 @@ function SpeciesBuilder({
   onAdjustBlock,
   onClear,
   onAddToSide,
+  onDragStart,
+  onDragEnd,
 }: SpeciesBuilderProps) {
   const visibleElements = showAllElements
     ? elements
@@ -765,9 +805,9 @@ function SpeciesBuilder({
     <section className="species-builder" aria-labelledby="builder-heading">
       <div className="builder-heading">
         <div><p className="eyebrow">Catalog resolution</p><h2 id="builder-heading">受控构建</h2></div>
-        <span>只匹配已有目录物种</span>
+        <span>只匹配已有目录物质</span>
       </div>
-      <p className="builder-intro">从元素与目录离子组成配方，再按组成和总电荷查找已知物种。</p>
+      <p className="builder-intro">从元素与目录离子组成配方，再按组成和总电荷查找已知物质。</p>
       {error ? <div className="catalog-state is-error" role="alert">{error}</div> : null}
       <BuilderBlockGroup title="常用阳离子" blocks={cationBlocks} onAddBlock={onAddBlock} />
       <BuilderBlockGroup title="阴离子 / 多原子离子" blocks={anionBlocks} onAddBlock={onAddBlock} />
@@ -809,21 +849,21 @@ function SpeciesBuilder({
         ) : null}
       </div>
       <div className="builder-matches" aria-live="polite">
-        <strong>已知物种匹配</strong>
+        <strong>已知物质匹配</strong>
         {!resolution ? <p>等待组成托盘。</p> : loading ? <p>正在匹配目录…</p> : !matches.length ? (
-          <p>没有匹配的已知目录物种；不会创建新的物种 identity。</p>
+          <p>没有匹配的已知目录物质；不会创建新的物质 identity。</p>
         ) : (
           <>
-            <p>{matches.length === 1 ? '已找到 1 个已知物种。' : `已找到 ${matches.length} 个有效候选，请选择。`}</p>
+            <p>{matches.length === 1 ? '已找到 1 个已知物质。' : `已找到 ${matches.length} 个有效候选，请选择。`}</p>
             <div className="builder-match-list">
               {matches.map((species) => (
-                <article key={species.applicationId} className="builder-match">
-                  <div><ChemistryNotation formula={species.formula} charge={species.charge} /><span>{species.nameZh}</span></div>
-                  <div className="species-add-actions">
-                    <button type="button" onClick={() => onAddToSide('reactants', species)} aria-label={`将${species.nameZh}添加到反应物`}>+ 反应物</button>
-                    <button type="button" onClick={() => onAddToSide('products', species)} aria-label={`将${species.nameZh}添加到生成物`}>+ 生成物</button>
-                  </div>
-                </article>
+                <SpeciesBlock
+                  key={species.applicationId}
+                  species={species}
+                  onAddToSide={onAddToSide}
+                  onDragStart={onDragStart}
+                  onDragEnd={onDragEnd}
+                />
               ))}
             </div>
           </>
@@ -854,45 +894,6 @@ function BuilderBlockGroup({
           </button>
         ))}
       </div>
-    </div>
-  )
-}
-
-function EquationResult({ result }: { result: BalanceEquationResponse }) {
-  const inputLabel = result.state === 'no_net_ionic'
-    ? '无净离子反应'
-    : result.inputState === 'balanced'
-      ? '输入已经守恒'
-      : '输入未配平，已求得最简整数比'
-  return (
-    <div className="equation-result-body">
-      <span className={`lab-status state-${result.state}`}>{inputLabel}</span>
-      <div className="formatted-equation" aria-label="配平结果">{result.formattedEquation}</div>
-      {result.message ? <p className="lab-message">{result.message}</p> : null}
-      {result.phenomenon ? <p className="lab-phenomenon"><strong>现象</strong>{result.phenomenon}</p> : null}
-      {result.products.length > 0 && result.conservation.elements.length > 0 ? (
-        <div className="conservation-table-wrap">
-          <table>
-            <caption>守恒核对</caption>
-            <thead><tr><th>项目</th><th>反应物侧</th><th>生成物侧</th><th>状态</th></tr></thead>
-            <tbody>
-              {result.conservation.elements.map((item) => (
-                <tr key={item.element}>
-                  <th>{item.element}</th><td>{item.reactants}</td><td>{item.products}</td>
-                  <td>{item.conserved ? '守恒' : '不守恒'}</td>
-                </tr>
-              ))}
-              {result.conservation.charge ? (
-                <tr><th>总电荷</th><td>{result.conservation.charge.reactants}</td><td>{result.conservation.charge.products}</td><td>{result.conservation.charge.conserved ? '守恒' : '不守恒'}</td></tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-      <aside className="redox-boundary">
-        <strong>不从配平结果推断机理</strong>
-        <p>{result.redox.message}</p>
-      </aside>
     </div>
   )
 }
