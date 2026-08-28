@@ -13,6 +13,7 @@ from .persistence import (
     KnowledgeCatalogBase,
 )
 from .postgres import PostgresCatalogReader
+from .api import CatalogReader, get_catalog_reader
 from .read_model import (
     CatalogReactionParticipantResult,
     CatalogReactionResult,
@@ -40,6 +41,7 @@ __all__ = [
     "CatalogSourceCrosswalkRow",
     "CatalogSpeciesResult",
     "CatalogSpeciesRow",
+    "CatalogReader",
     "CatalogStructureLinkRow",
     "CatalogTeachingProjectionRow",
     "KnowledgeCatalogBase",
@@ -51,6 +53,7 @@ __all__ = [
     "VerifiedArtifact",
     "VerifiedRelease",
     "import_consolidated_release",
+    "get_catalog_reader",
     "read_git_source_identity",
     "verify_release",
 ]

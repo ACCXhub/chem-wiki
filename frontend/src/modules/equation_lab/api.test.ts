@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest'
 
-import { balanceEquation, searchCatalogSpecies } from './api'
+import { balanceEquation, findReactionCandidates, searchCatalogSpecies } from './api'
 
 
 afterEach(() => vi.unstubAllGlobals())
@@ -17,6 +17,29 @@ test('posts the equation mode to the M05 balance boundary', async () => {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ equation: 'H2 + O2 -> H2O', mode: 'molecular' }),
+  })
+})
+
+test('posts structured material anchors to the M07 candidate boundary', async () => {
+  const candidate = { consolidatedId: 'reaction:water' }
+  const fetchMock = vi.fn(() => Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({ candidates: [candidate] }),
+  }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await expect(findReactionCandidates({
+    reactantApplicationIds: ['h2', 'o2'],
+    productApplicationIds: ['h2o'],
+  })).resolves.toEqual([candidate])
+  expect(fetchMock).toHaveBeenCalledWith('/v1/reaction-builder/candidates', {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      reactantApplicationIds: ['h2', 'o2'],
+      productApplicationIds: ['h2o'],
+    }),
+    signal: undefined,
   })
 })
 

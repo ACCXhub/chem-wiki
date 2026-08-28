@@ -7,6 +7,8 @@ import type {
   EquationDraftParticipant,
   EquationMode,
   EquationPhase,
+  ReactionCandidate,
+  ReactionCandidateParticipant,
 } from '../types'
 
 export type DraftSide = 'reactants' | 'products'
@@ -20,6 +22,7 @@ const MODE_LABELS: Record<EquationMode, string> = {
 
 interface EquationWorkbenchProps {
   draft: EquationDraft
+  focusedReaction: ReactionCandidate | null
   result: BalanceEquationResponse | null
   error: string | null
   loading: boolean
@@ -35,7 +38,6 @@ interface EquationWorkbenchProps {
   onUndo: () => void
   onRedo: () => void
   onCopy: () => Promise<void>
-  onClearSide: (side: DraftSide) => void
   onRemove: (side: DraftSide, applicationId: string) => void
   onPhase: (side: DraftSide, applicationId: string, phase: EquationPhase | null) => void
   onWorkbenchDragOver: (event: DragEvent<HTMLElement>) => void
@@ -46,8 +48,21 @@ interface EquationWorkbenchProps {
   onDragEnd: () => void
 }
 
+interface DisplayParticipant {
+  key: string
+  applicationId: string | null
+  nameZh: string
+  formula: string
+  charge: number
+  phase: EquationPhase | null
+  coefficient: number | string | null
+  source: 'anchor' | 'canonical'
+  entityKind: 'ion' | 'substance' | null
+}
+
 export default function EquationWorkbench({
   draft,
+  focusedReaction,
   result,
   error,
   loading,
@@ -63,7 +78,6 @@ export default function EquationWorkbench({
   onUndo,
   onRedo,
   onCopy,
-  onClearSide,
   onRemove,
   onPhase,
   onWorkbenchDragOver,
@@ -75,6 +89,10 @@ export default function EquationWorkbench({
 }: EquationWorkbenchProps) {
   const canSubmit = draft.reactants.length > 0 && (draft.products.length > 0 || draft.mode === 'net_ionic')
   const [copied, setCopied] = useState(false)
+  const reactants = displayParticipants('reactants', draft, focusedReaction, result)
+  const products = displayParticipants('products', draft, focusedReaction, result)
+  const arrow = focusedReaction?.reversible ? '⇌' : '→'
+  const stateLabel = loading ? '正在配平…' : error ? '配平失败' : result ? '已配平' : '配平工具'
 
   const copy = () => {
     void onCopy().then(() => {
@@ -82,14 +100,6 @@ export default function EquationWorkbench({
       window.setTimeout(() => setCopied(false), 1200)
     })
   }
-
-  const stateLabel = loading
-    ? '正在配平…'
-    : error
-      ? '无法配平'
-      : result
-        ? '已配平'
-        : '草稿'
 
   return (
     <form className="composer-panel equation-workbench" onSubmit={onSubmit}>
@@ -102,86 +112,107 @@ export default function EquationWorkbench({
           ))}
         </div>
         <div className="workbench-controls">
-          <label className="auto-balance-control">
-            <input type="checkbox" checked={autoBalance} onChange={(event) => onAutoBalanceChange(event.target.checked)} />
-            <span>自动配平</span><strong>{autoBalance ? 'ON' : 'OFF'}</strong>
-          </label>
           <button className="history-button" type="button" onClick={onUndo} disabled={!canUndo} aria-label="撤销">↶</button>
           <button className="history-button" type="button" onClick={onRedo} disabled={!canRedo} aria-label="重做">↷</button>
+          <button className="copy-equation" type="button" onClick={copy} disabled={!reactants.length && !products.length}>{copied ? '已复制' : '复制'}</button>
           <button className="clear-draft" type="button" onClick={onClearDraft} disabled={!draft.reactants.length && !draft.products.length}>清空</button>
         </div>
       </div>
 
       <div
-        className={`equation-composer ${dragTarget ? 'is-dragging' : ''}`}
+        className={`equation-composer ${dragTarget ? 'is-dragging' : ''} ${focusedReaction ? 'is-focused' : ''}`}
         aria-label="结构化方程式草稿"
         onDragOver={onWorkbenchDragOver}
         onDragLeave={onWorkbenchDragLeave}
         onDrop={(event) => onDrop(event)}
       >
-        <DraftSidePanel
-          title="反应物"
-          side="reactants"
-          participants={draft.reactants}
-          dragTarget={dragTarget}
-          duplicatePulse={duplicatePulse}
-          onClear={() => onClearSide('reactants')}
-          onRemove={onRemove}
-          onPhase={onPhase}
-          onParticipantDragOver={onParticipantDragOver}
-          onParticipantDragStart={onParticipantDragStart}
-          onDrop={onDrop}
-          onDragEnd={onDragEnd}
-        />
-        <div className="composer-arrow" aria-label="生成">→</div>
-        <DraftSidePanel
-          title="生成物"
-          side="products"
-          participants={draft.products}
-          dragTarget={dragTarget}
-          duplicatePulse={duplicatePulse}
-          onClear={() => onClearSide('products')}
-          onRemove={onRemove}
-          onPhase={onPhase}
-          onParticipantDragOver={onParticipantDragOver}
-          onParticipantDragStart={onParticipantDragStart}
-          onDrop={onDrop}
-          onDragEnd={onDragEnd}
-        />
+        <DraftSideLine side="reactants" participants={reactants} dragTarget={dragTarget} duplicatePulse={duplicatePulse} onRemove={onRemove} onPhase={onPhase} onParticipantDragOver={onParticipantDragOver} onParticipantDragStart={onParticipantDragStart} onDrop={onDrop} onDragEnd={onDragEnd} />
+        <div className="composer-arrow" aria-label={focusedReaction?.reversible ? '可逆反应' : '生成'}>{arrow}</div>
+        <DraftSideLine side="products" participants={products} dragTarget={dragTarget} duplicatePulse={duplicatePulse} onRemove={onRemove} onPhase={onPhase} onParticipantDragOver={onParticipantDragOver} onParticipantDragStart={onParticipantDragStart} onDrop={onDrop} onDragEnd={onDragEnd} />
       </div>
 
-      <section className="equation-live-surface" aria-live="polite" aria-label="实时方程式">
-        <div className="live-heading"><p>实时方程式</p><span className={`equation-state ${error ? 'is-error' : ''}`}>{stateLabel}</span></div>
-        <div className="live-equation-row"><LiveEquation draft={draft} result={result} /><button type="button" className="copy-equation" onClick={copy}>{copied ? '已复制' : '复制'}</button></div>
-        {error ? <div className="lab-error compact" role="alert"><strong>无法配平</strong><span>{error}</span></div> : null}
-        {result ? <EquationResultDetails result={result} /> : null}
-      </section>
+      {focusedReaction ? <FocusedReactionKnowledge reaction={focusedReaction} /> : null}
+      {error ? <div className="lab-error compact" role="alert"><strong>无法配平</strong><span>{error}</span></div> : null}
+      {result ? <EquationResultDetails result={result} /> : null}
 
-      <div className="composer-actions">
-        <p>{draft.mode === 'net_ionic' && draft.reactants.length && !draft.products.length
-          ? '净离子模式可检查“无净离子反应”。'
-          : autoBalance ? '从物质库拖入；有效草稿会自动配平。' : '自动配平已关闭；完成编辑后可手动配平。'}</p>
-        {!autoBalance ? <button className="lab-submit" type="submit" disabled={loading || !canSubmit}>{loading ? '正在计算…' : '配平'}</button> : null}
-      </div>
+      <details className="balance-tools">
+        <summary>{stateLabel}</summary>
+        <div className="balance-tool-row">
+          <label className="auto-balance-control">
+            <input type="checkbox" checked={autoBalance} onChange={(event) => onAutoBalanceChange(event.target.checked)} />
+            <span>自动配平</span><strong>{autoBalance ? 'ON' : 'OFF'}</strong>
+          </label>
+          {!autoBalance ? <button className="lab-submit" type="submit" disabled={loading || !canSubmit}>{loading ? '正在计算…' : '配平'}</button> : null}
+        </div>
+      </details>
     </form>
   )
 }
 
-function LiveEquation({ draft, result }: { draft: EquationDraft; result: BalanceEquationResponse | null }) {
-  if (result) return <div className="formatted-equation" aria-label="配平结果">{result.formattedEquation}</div>
-  const renderSide = (participants: EquationDraftParticipant[]) => participants.length
-    ? participants.map((participant, index) => <span className="live-term" key={participant.applicationId}>{index ? <span className="live-plus"> + </span> : null}<ChemistryNotation formula={participant.formula} charge={participant.charge} phase={participant.phase} /></span>)
-    : <span className="live-placeholder">{draft.reactants.length ? '等待生成物' : '从下方物质库拖放'}</span>
-  return <div className="formatted-equation live-draft">{renderSide(draft.reactants)}{draft.reactants.length ? <span className="live-arrow"> → </span> : null}{draft.reactants.length ? renderSide(draft.products) : null}</div>
+function canonicalRoleForSide(side: DraftSide, reaction: ReactionCandidate) {
+  const canonicalRole = side === 'reactants' ? 'reactant' : 'product'
+  if (reaction.orientation === 'canonical') return canonicalRole
+  return canonicalRole === 'reactant' ? 'product' : 'reactant'
 }
 
-interface DraftSidePanelProps {
-  title: string
+function displayParticipants(side: DraftSide, draft: EquationDraft, focusedReaction: ReactionCandidate | null, result: BalanceEquationResponse | null): DisplayParticipant[] {
+  const anchors = draft[side]
+  if (!focusedReaction) {
+    return anchors.map((participant, index) => displayAnchor(participant, result?.[side][index]?.coefficient ?? null))
+  }
+
+  const canonical = focusedReaction.participants.filter((participant) => participant.role === canonicalRoleForSide(side, focusedReaction))
+  const anchorById = new Map(anchors.map((participant) => [participant.applicationId, participant]))
+  const represented = new Set<string>()
+  const completed = canonical.flatMap((participant, index) => {
+    const anchor = participant.applicationTargetId ? anchorById.get(participant.applicationTargetId) : undefined
+    if (anchor) {
+      represented.add(anchor.applicationId)
+      return [{ ...displayAnchor(anchor, participant.coefficient), phase: anchor.phase ?? participant.phase }]
+    }
+    const projected = displayCanonical(participant, index)
+    return projected ? [projected] : []
+  })
+  for (const anchor of anchors) {
+    if (!represented.has(anchor.applicationId)) completed.push(displayAnchor(anchor, null))
+  }
+  return completed
+}
+
+function displayAnchor(participant: EquationDraftParticipant, coefficient: number | string | null): DisplayParticipant {
+  return {
+    key: participant.applicationId,
+    applicationId: participant.applicationId,
+    nameZh: participant.nameZh,
+    formula: participant.formula,
+    charge: participant.charge,
+    phase: participant.phase,
+    coefficient,
+    source: 'anchor',
+    entityKind: participant.entityKind,
+  }
+}
+
+function displayCanonical(participant: ReactionCandidateParticipant, index: number): DisplayParticipant | null {
+  if (!participant.formula && !participant.nonSpeciesRef) return null
+  return {
+    key: participant.applicationTargetId ?? participant.nonSpeciesRef ?? `canonical:${index}`,
+    applicationId: participant.applicationTargetId,
+    nameZh: participant.nameZh ?? participant.nonSpeciesRef ?? participant.formula ?? '参与者',
+    formula: participant.formula ?? participant.nonSpeciesRef ?? '',
+    charge: participant.charge ?? 0,
+    phase: participant.phase,
+    coefficient: participant.coefficient,
+    source: 'canonical',
+    entityKind: participant.targetType,
+  }
+}
+
+interface DraftSideLineProps {
   side: DraftSide
-  participants: EquationDraftParticipant[]
+  participants: DisplayParticipant[]
   dragTarget: DragTarget | null
   duplicatePulse: string | null
-  onClear: () => void
   onRemove: (side: DraftSide, applicationId: string) => void
   onPhase: (side: DraftSide, applicationId: string, phase: EquationPhase | null) => void
   onParticipantDragOver: (event: DragEvent<HTMLElement>, target: DragTarget) => void
@@ -190,40 +221,26 @@ interface DraftSidePanelProps {
   onDragEnd: () => void
 }
 
-function DraftSidePanel({ title, side, participants, dragTarget, duplicatePulse, onClear, onRemove, onPhase, onParticipantDragOver, onParticipantDragStart, onDrop, onDragEnd }: DraftSidePanelProps) {
+function DraftSideLine({ side, participants, dragTarget, duplicatePulse, onRemove, onPhase, onParticipantDragOver, onParticipantDragStart, onDrop, onDragEnd }: DraftSideLineProps) {
+  const title = side === 'reactants' ? '反应物' : '生成物'
   return (
-    <section
-      className={`draft-side ${dragTarget?.side === side ? 'is-drag-target' : ''}`}
-      aria-label={title}
-      onDragOver={(event) => { event.stopPropagation(); onParticipantDragOver(event, { side }) }}
-      onDrop={(event) => { event.stopPropagation(); onDrop(event, { side }) }}
-    >
-      <header><h2>{title}</h2><button type="button" onClick={onClear} disabled={!participants.length}>清空</button></header>
-      {!participants.length ? <p className="draft-placeholder">拖到这里</p> : null}
+    <section className={`draft-side ${dragTarget?.side === side ? 'is-drag-target' : ''}`} aria-label={title} onDragOver={(event) => { event.stopPropagation(); onParticipantDragOver(event, { side }) }} onDrop={(event) => { event.stopPropagation(); onDrop(event, { side }) }}>
       <div className="draft-participants">
         {participants.map((participant, index) => (
-          <ParticipantBlock
-            key={participant.applicationId}
-            participant={participant}
-            side={side}
-            index={index}
-            isDropTarget={dragTarget?.side === side && dragTarget.index === index}
-            isPulsing={duplicatePulse === `${side}:${participant.applicationId}`}
-            onRemove={onRemove}
-            onPhase={onPhase}
-            onDragOver={onParticipantDragOver}
-            onDragStart={onParticipantDragStart}
-            onDrop={onDrop}
-            onDragEnd={onDragEnd}
-          />
+          <span className="equation-term" key={participant.key}>
+            {index ? <span className="equation-plus" aria-hidden="true">+</span> : null}
+            <ParticipantBlock participant={participant} side={side} index={index} isDropTarget={dragTarget?.side === side && dragTarget.index === index} isPulsing={duplicatePulse === `${side}:${participant.applicationId}`} onRemove={onRemove} onPhase={onPhase} onDragOver={onParticipantDragOver} onDragStart={onParticipantDragStart} onDrop={onDrop} onDragEnd={onDragEnd} />
+          </span>
         ))}
+        {participants.length ? <span className="equation-plus trailing-plus" aria-hidden="true">+</span> : null}
+        <div className={`equation-empty-slot ${dragTarget?.side === side && dragTarget.index === undefined ? 'is-active' : ''}`} aria-label={`${title}空槽位`} onDragOver={(event) => { event.stopPropagation(); onParticipantDragOver(event, { side }) }} onDrop={(event) => { event.stopPropagation(); onDrop(event, { side }) }}><span aria-hidden="true">＋</span></div>
       </div>
     </section>
   )
 }
 
 interface ParticipantBlockProps {
-  participant: EquationDraftParticipant
+  participant: DisplayParticipant
   side: DraftSide
   index: number
   isDropTarget: boolean
@@ -240,27 +257,31 @@ function ParticipantBlock({ participant, side, index, isDropTarget, isPulsing, o
   const [phaseOpen, setPhaseOpen] = useState(false)
   const clickTimer = useRef<number | null>(null)
   const suppressClick = useRef(false)
+  const isAnchor = participant.source === 'anchor' && participant.applicationId !== null
 
   const clearClickTimer = () => {
     if (clickTimer.current !== null) window.clearTimeout(clickTimer.current)
     clickTimer.current = null
   }
   const deferPhase = () => {
-    if (suppressClick.current) return
+    if (!isAnchor || suppressClick.current) return
     clearClickTimer()
     clickTimer.current = window.setTimeout(() => { setPhaseOpen((current) => !current); clickTimer.current = null }, 180)
   }
   const handleDoubleClick = (event: MouseEvent<HTMLElement>) => {
+    if (!isAnchor || !participant.applicationId) return
     event.preventDefault()
     clearClickTimer()
     setPhaseOpen(false)
     onRemove(side, participant.applicationId)
   }
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!isAnchor || !participant.applicationId) return
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); clearClickTimer(); setPhaseOpen((current) => !current) }
     if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); clearClickTimer(); setPhaseOpen(false); onRemove(side, participant.applicationId) }
   }
   const handleDragStart = (event: DragEvent<HTMLElement>) => {
+    if (!isAnchor || !participant.applicationId) { event.preventDefault(); return }
     suppressClick.current = true
     clearClickTimer()
     setPhaseOpen(false)
@@ -272,30 +293,32 @@ function ParticipantBlock({ participant, side, index, isDropTarget, isPulsing, o
     onDragEnd()
     window.setTimeout(() => { suppressClick.current = false }, 140)
   }
+  const gestureLabel = isAnchor ? '点击编辑物态，双击移除' : '由当前反应补全'
   return (
-    <div
-      className={`draft-participant kind-${participant.entityKind} ${isDropTarget ? 'is-drop-target' : ''} ${isPulsing ? 'is-pulsing' : ''}`}
-      draggable
-      tabIndex={0}
-      onClick={deferPhase}
-      onDoubleClick={handleDoubleClick}
-      onKeyDown={handleKeyDown}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      onDragOver={(event) => { event.stopPropagation(); onDragOver(event, { side, index }) }}
-      onDrop={(event) => { event.stopPropagation(); onDrop(event, { side, index }) }}
-      aria-label={`${participant.nameZh}，点击编辑物态，双击移除`}
-    >
+    <div className={`draft-participant kind-${participant.entityKind ?? 'reference'} source-${participant.source} ${isDropTarget ? 'is-drop-target' : ''} ${isPulsing ? 'is-pulsing' : ''}`} draggable={isAnchor} tabIndex={isAnchor ? 0 : undefined} onClick={deferPhase} onDoubleClick={handleDoubleClick} onKeyDown={handleKeyDown} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragOver={(event) => { event.stopPropagation(); onDragOver(event, { side, index }) }} onDrop={(event) => { event.stopPropagation(); onDrop(event, { side, index }) }} aria-label={`${participant.nameZh}，${gestureLabel}`}>
+      {participant.coefficient !== null && String(participant.coefficient) !== '1' ? <strong className="participant-coefficient">{participant.coefficient}</strong> : null}
       <ChemistryNotation formula={participant.formula} charge={participant.charge} phase={participant.phase} />
       <span>{participant.nameZh}</span>
-      {phaseOpen ? <div className="phase-selector" role="group" aria-label={`${participant.nameZh}的物态`} onClick={(event) => event.stopPropagation()}>
-        {([null, 's', 'l', 'g', 'aq'] as Array<EquationPhase | null>).map((phase) => <button key={phase ?? 'none'} type="button" aria-pressed={participant.phase === phase} onClick={() => { onPhase(side, participant.applicationId, phase); setPhaseOpen(false) }}>{phase ? `(${phase})` : '—'}</button>)}
+      {phaseOpen && participant.applicationId ? <div className="phase-selector" role="group" aria-label={`${participant.nameZh}的物态`} onClick={(event) => event.stopPropagation()}>
+        {([null, 's', 'l', 'g', 'aq'] as Array<EquationPhase | null>).map((phase) => <button key={phase ?? 'none'} type="button" aria-pressed={participant.phase === phase} onClick={() => { onPhase(side, participant.applicationId as string, phase); setPhaseOpen(false) }}>{phase ? `(${phase})` : '—'}</button>)}
       </div> : null}
     </div>
   )
 }
 
+function FocusedReactionKnowledge({ reaction }: { reaction: ReactionCandidate }) {
+  const hasSource = reaction.provenanceRefs.length > 0 || reaction.sourcePackage || reaction.sourceId
+  return (
+    <section className="focused-reaction-knowledge" aria-label="当前反应">
+      <div className="focused-reaction-title"><span>当前反应</span><strong>{reaction.nameZh}</strong></div>
+      {reaction.reactionTypes.length ? <p><span>反应类型</span>{reaction.reactionTypes.join(' · ')}</p> : null}
+      {reaction.conditions.length ? <p><span>反应条件</span>{reaction.conditions.join(' · ')}</p> : null}
+      {hasSource ? <details><summary>来源</summary><p>{reaction.provenanceRefs.length ? reaction.provenanceRefs.join(' · ') : `${reaction.sourcePackage}:${reaction.sourceId}`}</p></details> : null}
+    </section>
+  )
+}
+
 function EquationResultDetails({ result }: { result: BalanceEquationResponse }) {
   const inputLabel = result.state === 'no_net_ionic' ? '无净离子反应' : result.inputState === 'balanced' ? '输入已经守恒' : '输入未配平，已求得最简整数比'
-  return <details className="equation-result-details"><summary><span className={`lab-status state-${result.state}`}>{inputLabel}</span><span>守恒详情</span></summary>{result.message ? <p className="lab-message">{result.message}</p> : null}{result.phenomenon ? <p className="lab-phenomenon"><strong>现象</strong>{result.phenomenon}</p> : null}{result.products.length > 0 && result.conservation.elements.length > 0 ? <div className="conservation-table-wrap"><table><caption>守恒核对</caption><thead><tr><th>项目</th><th>反应物侧</th><th>生成物侧</th><th>状态</th></tr></thead><tbody>{result.conservation.elements.map((item) => <tr key={item.element}><th>{item.element}</th><td>{item.reactants}</td><td>{item.products}</td><td>{item.conserved ? '守恒' : '不守恒'}</td></tr>)}{result.conservation.charge ? <tr><th>总电荷</th><td>{result.conservation.charge.reactants}</td><td>{result.conservation.charge.products}</td><td>{result.conservation.charge.conserved ? '守恒' : '不守恒'}</td></tr> : null}</tbody></table></div> : null}<aside className="redox-boundary"><strong>不从配平结果推断机理</strong><p>{result.redox.message}</p></aside></details>
+  return <details className="equation-result-details"><summary><span className={`lab-status state-${result.state}`}>{inputLabel}</span><span>守恒详情</span></summary>{result.message ? <p className="lab-message">{result.message}</p> : null}{result.phenomenon ? <p className="lab-phenomenon"><strong>现象</strong>{result.phenomenon}</p> : null}{result.products.length > 0 && result.conservation.elements.length > 0 ? <div className="conservation-table-wrap"><table><caption>守恒核对</caption><thead><tr><th>项目</th><th>反应物侧</th><th>生成物侧</th><th>状态</th></tr></thead><tbody>{result.conservation.elements.map((item) => <tr key={item.element}><th>{item.element}</th><td>{item.reactants}</td><td>{item.products}</td><td>{item.conserved ? '守恒' : '不守恒'}</td></tr>)}{result.conservation.charge ? <tr><th>总电荷</th><td>{result.conservation.charge.reactants}</td><td>{result.conservation.charge.products}</td><td>{result.conservation.charge.conserved ? '守恒' : '不守恒'}</td></tr> : null}</tbody></table></div> : null}</details>
 }

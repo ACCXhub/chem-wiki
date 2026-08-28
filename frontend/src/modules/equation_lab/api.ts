@@ -3,6 +3,8 @@ import type {
   CatalogSpecies,
   CatalogSpeciesQuery,
   EquationMode,
+  ReactionCandidate,
+  ReactionCandidateQuery,
 } from './types'
 
 
@@ -61,4 +63,22 @@ export async function balanceEquation(
     throw apiError(payload, response.status, '方程式处理失败')
   }
   return (await response.json()) as BalanceEquationResponse
+}
+
+export async function findReactionCandidates(
+  query: ReactionCandidateQuery,
+  signal?: AbortSignal,
+): Promise<ReactionCandidate[]> {
+  const response = await fetch('/v1/reaction-builder/candidates', {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(query),
+    signal,
+  })
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as ErrorPayload | null
+    throw apiError(payload, response.status, '候选反应加载失败')
+  }
+  const payload = (await response.json()) as { candidates: ReactionCandidate[] }
+  return payload.candidates
 }

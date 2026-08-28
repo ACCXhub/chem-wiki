@@ -33,6 +33,10 @@ class CatalogReader(Protocol):
 
     def get_reaction(self, consolidated_id: str) -> CatalogReactionResult | None: ...
 
+    def find_reactions_by_application_ids(
+        self, application_ids: list[UUID]
+    ) -> list[CatalogReactionResult]: ...
+
 
 @lru_cache(maxsize=1)
 def _session_factory() -> sessionmaker[Session]:

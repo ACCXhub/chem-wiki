@@ -32,6 +32,43 @@ export interface EquationDraft {
   products: EquationDraftParticipant[]
 }
 
+export interface ReactionCandidateParticipant {
+  role: string
+  coefficient: number | string
+  speciesId: string | null
+  applicationTargetId: string | null
+  targetType: 'ion' | 'substance' | null
+  nonSpeciesRef: string | null
+  nameZh: string | null
+  formula: string | null
+  charge: number | null
+  phase: EquationPhase | null
+}
+
+export interface ReactionCandidate {
+  consolidatedId: string
+  applicationReactionId: string | null
+  nameZh: string
+  materializationState: 'materialized' | 'catalog_only'
+  participants: ReactionCandidateParticipant[]
+  equation: string | null
+  reversible: boolean | null
+  reactionTypes: string[]
+  conditions: string[]
+  provenanceRefs: string[]
+  sourcePackage: string
+  sourceId: string
+  orientation: 'canonical' | 'reverse'
+  matchedAnchorCount: number
+  completionRatio: number
+  missingParticipantCount: number
+}
+
+export interface ReactionCandidateQuery {
+  reactantApplicationIds: string[]
+  productApplicationIds: string[]
+}
+
 export interface CatalogSpeciesQuery {
   query?: string
   applicationIds?: string[]

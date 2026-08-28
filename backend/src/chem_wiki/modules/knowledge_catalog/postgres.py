@@ -159,8 +159,13 @@ class PostgresCatalogReader:
         row = self._session.get(CatalogReactionRow, consolidated_id)
         if row is None:
             return None
-        participant_rows = self._session.scalars(
-            select(CatalogReactionParticipantRow)
+        participant_rows = self._session.execute(
+            select(CatalogReactionParticipantRow, CatalogSpeciesRow)
+            .outerjoin(
+                CatalogSpeciesRow,
+                CatalogSpeciesRow.consolidated_id
+                == CatalogReactionParticipantRow.species_id,
+            )
             .where(CatalogReactionParticipantRow.reaction_id == consolidated_id)
             .order_by(CatalogReactionParticipantRow.ordinal)
         ).all()
@@ -176,8 +181,15 @@ class PostgresCatalogReader:
                 source_species_ref=participant_row.source_species_ref,
                 formula_literal=participant_row.formula_literal,
                 phase=participant_row.phase,
+                name_zh=species_row.name_zh if species_row is not None else None,
+                formula=(
+                    species_row.formula
+                    if species_row is not None
+                    else participant_row.formula_literal
+                ),
+                charge=species_row.charge if species_row is not None else None,
             )
-            for participant_row in participant_rows
+            for participant_row, species_row in participant_rows
         ]
         return CatalogReactionResult(
             consolidated_id=row.consolidated_id,
@@ -195,3 +207,18 @@ class PostgresCatalogReader:
             reversible=row.original_payload.get("reversible"),
             provenance_refs=list(row.original_payload["provenance_refs"]),
         )
+
+    def find_reactions_by_application_ids(
+        self, application_ids: list[UUID]
+    ) -> list[CatalogReactionResult]:
+        identities = sorted(set(application_ids), key=str)
+        if not identities:
+            return []
+        reaction_ids = self._session.scalars(
+            select(CatalogReactionParticipantRow.reaction_id)
+            .where(CatalogReactionParticipantRow.application_target_id.in_(identities))
+            .distinct()
+            .order_by(CatalogReactionParticipantRow.reaction_id)
+        ).all()
+        reactions = [self.get_reaction(reaction_id) for reaction_id in reaction_ids]
+        return [reaction for reaction in reactions if reaction is not None]

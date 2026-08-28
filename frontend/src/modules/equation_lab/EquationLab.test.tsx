@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, expect, test, vi } from 'vitest'
 
 import { EquationLabView } from './EquationLab'
-import type { BalanceEquationResponse, CatalogSpecies } from './types'
+import type { BalanceEquationResponse, CatalogSpecies, ReactionCandidate } from './types'
 import type { PeriodicTableElement } from '../periodic_table'
 
 
@@ -67,6 +67,36 @@ const molecularCatalog = [
   species('h2o', '水', 'H2O'),
 ]
 
+function reactionCandidate(
+  id: string,
+  nameZh: string,
+  product: CatalogSpecies,
+  reversible = false,
+): ReactionCandidate {
+  return {
+    consolidatedId: id,
+    applicationReactionId: `application:${id}`,
+    nameZh,
+    materializationState: 'materialized',
+    participants: [
+      { role: 'reactant', coefficient: 2, speciesId: molecularCatalog[0].consolidatedId, applicationTargetId: 'h2', targetType: 'substance', nonSpeciesRef: null, nameZh: '氢气', formula: 'H2', charge: 0, phase: 'g' },
+      { role: 'reactant', coefficient: 1, speciesId: molecularCatalog[1].consolidatedId, applicationTargetId: 'o2', targetType: 'substance', nonSpeciesRef: null, nameZh: '氧气', formula: 'O2', charge: 0, phase: 'g' },
+      { role: 'product', coefficient: 2, speciesId: product.consolidatedId, applicationTargetId: product.applicationId, targetType: 'substance', nonSpeciesRef: null, nameZh: product.nameZh, formula: product.formula, charge: product.charge, phase: 'l' },
+    ],
+    equation: product.applicationId === 'h2o' ? '2H2 + O2 -> 2H2O' : `2H2 + O2 -> 2${product.formula}`,
+    reversible,
+    reactionTypes: ['化合反应'],
+    conditions: ['点燃'],
+    provenanceRefs: ['catalog:test'],
+    sourcePackage: 'test',
+    sourceId: id,
+    orientation: 'canonical',
+    matchedAnchorCount: 1,
+    completionRatio: 1 / 3,
+    missingParticipantCount: 2,
+  }
+}
+
 beforeEach(() => window.localStorage.clear())
 
 function material(name: string, scope = document.body) {
@@ -106,7 +136,10 @@ test('drags H2 and O2 into reactants and H2O into products, then auto-balances',
   fireEvent.drop(products, { dataTransfer })
 
   await waitFor(() => expect(onBalance).toHaveBeenCalledWith('H2 + O2 -> H2O', 'molecular'))
-  expect(await screen.findByText('2H₂ + O₂ → 2H₂O')).toBeInTheDocument()
+  await screen.findByText('输入未配平，已求得最简整数比')
+  expect(screen.getByLabelText('结构化方程式草稿')).toHaveTextContent('2H₂氢气+O₂氧气+＋→2H₂O水+＋')
+  expect(screen.getByLabelText('反应物空槽位')).toBeInTheDocument()
+  expect(screen.getByLabelText('生成物空槽位')).toBeInTheDocument()
   expect(screen.getByText('输入未配平，已求得最简整数比')).toBeInTheDocument()
   expect(screen.getAllByRole('cell', { name: '4' })).toHaveLength(2)
 })
@@ -132,6 +165,19 @@ test('converges same-side duplicates and supports participant move, removal, and
   expect(screen.queryByLabelText('氢气，点击编辑物态，双击移除')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '撤销' }))
   expect(await screen.findByLabelText('氢气，点击编辑物态，双击移除')).toBeInTheDocument()
+})
+
+test('keeps keyboard placement controls active inside a material block', async () => {
+  render(<EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={() => Promise.resolve(molecularCatalog)} />)
+
+  await screen.findByText('氢气')
+  const hydrogen = material('氢气')
+  fireEvent.keyDown(hydrogen, { key: 'Enter' })
+  const placeReactant = within(hydrogen).getByRole('button', { name: '放入反应物' })
+  fireEvent.keyDown(placeReactant, { key: 'Enter' })
+  expect(placeReactant).toBeInTheDocument()
+  fireEvent.click(placeReactant)
+  expect(screen.getByRole('region', { name: '反应物' })).toHaveTextContent('氢气')
 })
 
 test('combines catalog search and category with the current equation mode', async () => {
@@ -200,7 +246,8 @@ test('keeps the already-balanced result state visible', async () => {
   addMaterial('氢气', 'reactants')
   addMaterial('水', 'products')
   expect(await screen.findByText('输入已经守恒')).toBeInTheDocument()
-  expect(screen.getByText('不从配平结果推断机理')).toBeInTheDocument()
+  expect(screen.queryByText('不从配平结果推断机理')).not.toBeInTheDocument()
+  expect(screen.queryByText('实时方程式')).not.toBeInTheDocument()
 })
 
 test('stops automatic balancing when disabled while preserving explicit balancing', async () => {
@@ -239,10 +286,55 @@ test('does not let an older automatic balance response replace a newer draft', a
   fireEvent.click(screen.getByRole('button', { name: '(g)' }))
   resolveFirst(result)
   await Promise.resolve()
-  expect(screen.queryByLabelText('配平结果')).not.toBeInTheDocument()
+  expect(document.querySelector('.participant-coefficient')).not.toBeInTheDocument()
   await waitFor(() => expect(onBalance).toHaveBeenCalledWith('H2(g) + O2 -> H2O', 'molecular'))
   resolveSecond(result)
-  expect(await screen.findByLabelText('配平结果')).toHaveTextContent('2H₂ + O₂ → 2H₂O')
+  await waitFor(() => expect(screen.getByLabelText('结构化方程式草稿')).toHaveTextContent('2H₂'))
+})
+
+test('narrows candidates with both equation sides and auto-focuses a unique reaction', async () => {
+  const peroxide = species('h2o2', '过氧化氢', 'H2O2')
+  const waterReaction = reactionCandidate('reaction:water', '水的生成', molecularCatalog[2])
+  const peroxideReaction = reactionCandidate('reaction:peroxide', '过氧化氢的生成', peroxide)
+  const onFindCandidates = vi.fn((request: { reactantApplicationIds: string[]; productApplicationIds: string[] }) => {
+    if (request.productApplicationIds.includes('h2o')) return Promise.resolve([waterReaction])
+    return Promise.resolve([waterReaction, peroxideReaction])
+  })
+  render(<EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={() => Promise.resolve(molecularCatalog)} onFindCandidates={onFindCandidates} />)
+
+  await screen.findByText('氢气')
+  addMaterial('氢气', 'reactants')
+  expect(await screen.findByRole('heading', { name: '候选反应' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '选择反应 过氧化氢的生成' })).toBeInTheDocument()
+
+  addMaterial('水', 'products')
+  expect(await screen.findByRole('region', { name: '当前反应' })).toHaveTextContent('水的生成')
+  await waitFor(() => expect(onFindCandidates).toHaveBeenLastCalledWith({
+    reactantApplicationIds: ['h2'],
+    productApplicationIds: ['h2o'],
+  }, expect.any(AbortSignal)))
+  expect(screen.getByLabelText('氧气，由当前反应补全')).toBeInTheDocument()
+  expect(screen.getByText('化合反应')).toBeInTheDocument()
+  expect(screen.getByText('点燃')).toBeInTheDocument()
+})
+
+test('manually promotes an alternative candidate to the stable cluster center', async () => {
+  const peroxide = species('h2o2', '过氧化氢', 'H2O2')
+  const candidates = [
+    reactionCandidate('reaction:water', '水的生成', molecularCatalog[2]),
+    reactionCandidate('reaction:peroxide', '过氧化氢的生成', peroxide),
+  ]
+  render(<EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={() => Promise.resolve(molecularCatalog)} onFindCandidates={() => Promise.resolve(candidates)} />)
+
+  await screen.findByText('氢气')
+  addMaterial('氢气', 'reactants')
+  const alternative = await screen.findByRole('button', { name: '选择反应 过氧化氢的生成' })
+  expect(alternative).toHaveClass('is-alternative')
+  fireEvent.click(alternative)
+
+  expect(screen.getByRole('button', { name: '选择反应 过氧化氢的生成' })).toHaveClass('is-central')
+  expect(screen.getByRole('region', { name: '当前反应' })).toHaveTextContent('过氧化氢的生成')
+  expect(screen.getByLabelText('过氧化氢，由当前反应补全')).toBeInTheDocument()
 })
 
 test('keeps direct catalog selection primary while exposing the controlled builder', async () => {

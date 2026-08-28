@@ -43,6 +43,9 @@ class CatalogReactionParticipantResult(CatalogDto):
     source_species_ref: str
     formula_literal: str | None
     phase: str | None
+    name_zh: str | None
+    formula: str | None
+    charge: int | None
 
 
 class CatalogReactionResult(CatalogDto):

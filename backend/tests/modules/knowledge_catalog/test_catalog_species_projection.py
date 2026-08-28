@@ -2,7 +2,10 @@ from types import SimpleNamespace
 from uuid import UUID
 
 from chem_wiki.modules.knowledge_catalog import PostgresCatalogReader
-from chem_wiki.modules.knowledge_catalog.read_model import CatalogSpeciesResult
+from chem_wiki.modules.knowledge_catalog.read_model import (
+    CatalogReactionParticipantResult,
+    CatalogSpeciesResult,
+)
 
 
 class SessionStub:
@@ -51,6 +54,12 @@ def _projection() -> SimpleNamespace:
 def test_catalog_species_read_dto_exposes_composition_and_classifications() -> None:
     assert "composition" in CatalogSpeciesResult.model_fields
     assert "chemical_classifications" in CatalogSpeciesResult.model_fields
+
+
+def test_catalog_reaction_participant_exposes_canonical_species_display_fields() -> None:
+    assert {"name_zh", "formula", "charge"} <= set(
+        CatalogReactionParticipantResult.model_fields
+    )
 
 
 def test_catalog_reader_resolves_known_species_by_composition_charge_and_kind() -> None:

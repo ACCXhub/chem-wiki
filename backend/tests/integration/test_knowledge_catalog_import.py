@@ -157,6 +157,24 @@ def test_release_import_is_complete_idempotent_and_queryable(
         assert catalog_reaction.participants[2].non_species_ref == (
             "organic-material:phenol-formaldehyde-resin"
         )
+        mapped_participant = next(
+            participant
+            for participant in catalog_reaction.participants
+            if participant.application_target_id is not None
+        )
+        assert mapped_participant.name_zh
+        assert mapped_participant.formula
+        related_reactions = reader.find_reactions_by_application_ids(
+            [mapped_participant.application_target_id]
+        )
+        assert related_reactions
+        assert all(
+            any(
+                participant.application_target_id == mapped_participant.application_target_id
+                for participant in reaction.participants
+            )
+            for reaction in related_reactions
+        )
 
         response = TestClient(create_app()).get(
             "/v1/catalog/species",

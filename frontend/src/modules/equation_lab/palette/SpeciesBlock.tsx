@@ -40,6 +40,7 @@ export default function SpeciesBlock({
   const openPlacement = () => setPlacementOpen((current) => !current)
 
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget) return
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       openPlacement()

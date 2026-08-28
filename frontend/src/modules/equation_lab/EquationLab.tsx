@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react'
 
 import { loadPeriodicTableElements } from '../periodic_table'
-import { balanceEquation, searchCatalogSpecies } from './api'
+import { balanceEquation, findReactionCandidates, searchCatalogSpecies } from './api'
 import ChemistryNotation from './ChemistryNotation'
 import SpeciesBlock from './palette/SpeciesBlock'
+import ReactionCandidates from './reaction-builder/ReactionCandidates'
 import EquationWorkbench, { type DraftSide, type DragTarget } from './workbench/EquationWorkbench'
 import {
   addParticipant,
@@ -31,6 +32,8 @@ import type {
   EquationDraft,
   EquationDraftParticipant,
   EquationMode,
+  ReactionCandidate,
+  ReactionCandidateQuery,
 } from './types'
 import type { PeriodicTableElement } from '../periodic_table'
 import './equation-lab.css'
@@ -56,12 +59,20 @@ type SearchSpecies = (
   signal?: AbortSignal,
 ) => Promise<CatalogSpecies[]>
 
+type FindCandidates = (
+  query: ReactionCandidateQuery,
+  signal?: AbortSignal,
+) => Promise<ReactionCandidate[]>
+
+const NO_REACTION_CANDIDATES: FindCandidates = async () => []
+
 interface EquationLabViewProps extends EquationLabProps {
   onBalance: (
     equation: string,
     mode: EquationMode,
   ) => Promise<BalanceEquationResponse>
   onSearch?: SearchSpecies
+  onFindCandidates?: FindCandidates
   onLoadElements?: () => Promise<PeriodicTableElement[]>
 }
 
@@ -154,6 +165,7 @@ export function EquationLabView({
   onBack,
   onBalance,
   onSearch = searchCatalogSpecies,
+  onFindCandidates = NO_REACTION_CANDIDATES,
   onLoadElements = loadPeriodicTableElements,
 }: EquationLabViewProps) {
   const [history, setHistory] = useState<DraftHistory>({ past: [], present: EMPTY_DRAFT, future: [] })
@@ -183,6 +195,10 @@ export function EquationLabView({
   const [draggedItem, setDraggedItem] = useState<DraggedItem | null>(null)
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null)
   const [duplicatePulse, setDuplicatePulse] = useState<string | null>(null)
+  const [reactionCandidates, setReactionCandidates] = useState<ReactionCandidate[]>([])
+  const [selectedReactionId, setSelectedReactionId] = useState<string | null>(null)
+  const [candidateLoading, setCandidateLoading] = useState(false)
+  const [candidateError, setCandidateError] = useState<string | null>(null)
   const balanceRequestId = useRef(0)
 
   useEffect(() => {
@@ -329,6 +345,60 @@ export function EquationLabView({
       preferences.recents.filter((id) => !preferences.favorites.includes(id)),
     ),
     [preferences.favorites, preferences.recents, quickAccessSpecies, savedApplicationIds.length],
+  )
+
+  const reactionAnchorKey = useMemo(() => JSON.stringify({
+    reactants: draft.reactants.map((participant) => participant.applicationId),
+    products: draft.products.map((participant) => participant.applicationId),
+  }), [draft.products, draft.reactants])
+
+  useEffect(() => {
+    const anchors = JSON.parse(reactionAnchorKey) as {
+      reactants: string[]
+      products: string[]
+    }
+    const controller = new AbortController()
+    if (!anchors.reactants.length && !anchors.products.length) {
+      void Promise.resolve().then(() => {
+        if (controller.signal.aborted) return
+        setReactionCandidates([])
+        setSelectedReactionId(null)
+        setCandidateError(null)
+        setCandidateLoading(false)
+      })
+      return () => controller.abort()
+    }
+    void Promise.resolve().then(() => {
+      if (controller.signal.aborted) return
+      setSelectedReactionId(null)
+      setCandidateLoading(true)
+      setCandidateError(null)
+    })
+    const timer = window.setTimeout(() => {
+      void onFindCandidates({
+        reactantApplicationIds: anchors.reactants,
+        productApplicationIds: anchors.products,
+      }, controller.signal).then((candidates) => {
+        if (controller.signal.aborted) return
+        setReactionCandidates(candidates)
+        setSelectedReactionId(candidates.length === 1 ? candidates[0].consolidatedId : null)
+      }).catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return
+        setReactionCandidates([])
+        setCandidateError(reason instanceof Error ? reason.message : '候选反应加载失败')
+      }).finally(() => {
+        if (!controller.signal.aborted) setCandidateLoading(false)
+      })
+    }, 180)
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [onFindCandidates, reactionAnchorKey])
+
+  const focusedReaction = useMemo(
+    () => reactionCandidates.find((candidate) => candidate.consolidatedId === selectedReactionId) ?? null,
+    [reactionCandidates, selectedReactionId],
   )
 
   const invalidateBalance = useCallback(() => {
@@ -519,7 +589,7 @@ export function EquationLabView({
   }
 
   const copyEquation = async () => {
-    const text = result?.formattedEquation ?? serializeEquationDraft(draft)
+    const text = focusedReaction?.equation ?? result?.formattedEquation ?? serializeEquationDraft(draft)
     if (!text) return
     await navigator.clipboard.writeText(text)
   }
@@ -543,15 +613,15 @@ export function EquationLabView({
 
       <header className="equation-lab-header">
         <div>
-          <p className="eyebrow">M05 · Equation Composer</p>
+          <p className="eyebrow">M07 · Reaction Builder</p>
           <h1>方程实验室</h1>
-          <p>从课程物质库选择反应物与生成物，再交给守恒引擎配平。</p>
+          <p>把物质放入方程，逐步找到并完成已知反应。</p>
         </div>
-        <span className="engine-boundary">Catalog draft → M05 balance</span>
       </header>
 
       <EquationWorkbench
         draft={draft}
+        focusedReaction={focusedReaction}
         result={result}
         error={error}
         loading={loading}
@@ -567,7 +637,6 @@ export function EquationLabView({
         onUndo={undo}
         onRedo={redo}
         onCopy={copyEquation}
-        onClearSide={(side) => changeSide(side, () => [])}
         onRemove={(side, id) => changeSide(side, (items) => items.filter((item) => item.applicationId !== id))}
         onPhase={(side, id, phase) => changeSide(side, (items) => updateParticipantPhase(items, id, phase))}
         onWorkbenchDragOver={handleWorkbenchDragOver}
@@ -576,6 +645,14 @@ export function EquationLabView({
         onParticipantDragStart={(side, applicationId) => setDraggedItem({ kind: 'participant', side, applicationId })}
         onDrop={handleDrop}
         onDragEnd={clearDrag}
+      />
+
+      <ReactionCandidates
+        candidates={reactionCandidates}
+        selectedId={selectedReactionId}
+        loading={candidateLoading}
+        error={candidateError}
+        onSelect={(candidate) => setSelectedReactionId(candidate.consolidatedId)}
       />
 
       <section className="species-palette" aria-labelledby="palette-heading">
@@ -706,9 +783,6 @@ export function EquationLabView({
         </form>
       </details>
 
-      <p className="lab-scope-note">
-        此处只组合已知物质并调用 M05 守恒引擎；不预测生成物，不执行原子映射、键变化或机理推断。
-      </p>
     </main>
   )
 }
@@ -899,5 +973,5 @@ function BuilderBlockGroup({
 }
 
 export default function EquationLab({ onBack }: EquationLabProps) {
-  return <EquationLabView onBack={onBack} onBalance={balanceEquation} />
+  return <EquationLabView onBack={onBack} onBalance={balanceEquation} onFindCandidates={findReactionCandidates} />
 }
