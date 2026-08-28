@@ -5,6 +5,7 @@
 - 保持已冻结契约和各模块公共边界。跨模块只依赖模块公开入口，不直连其内部文件、私有 helper、来源格式或存储细节。
 - 每轮迭代使用 `task-anchor` 维持 Outcome、Master、Locked、Delta 和 Deliverables；涉及规范 owner、清理、替换或收敛时使用 `convergent-editing`，保持一个 canonical 当前状态。
 - 新增子系统、依赖、数据管线、编辑器、渲染器、图谱或计算能力前使用 `integration-first`：先检查仓库现有 owner、已安装依赖、已有数据投影和成熟开源方案，再实现真正剩余的产品特定能力。
+- OSS 目录或 awesome list 只用于发现候选；采用前以候选项目当前 upstream 为准核对维护状态、许可证、运行/包体成本、安全性和与现有 owner 的重叠。chemistry OSS 的当前选型状态由 `docs/PRODUCT_ROADMAP.md` 统一拥有。
 - 产品 UI、布局密度、响应式和视觉层级调整使用 `compact-product-ui`。学习者界面优先展示化学内容、操作和有意义状态，工程 milestone、数据库/owner 术语与开发边界留在工程文档。
 - 遇到失败先按 systematic debugging 收集证据、定位根因，再实施修复。新增行为适用时使用 TDD；宣告完成前执行新鲜验证。
 - 验证从最聚焦、最相关的检查开始，仅在风险或依赖关系需要时扩大回归范围。提交应表达有意义的完整变更，不为每个微小 TDD 步骤单独提交。
@@ -20,11 +21,11 @@
 
 自定义 Skill 的 canonical upstream 为 `ACCXhub/codex-skills`，用户级安装目录通常为 `%USERPROFILE%\.codex\skills\`。
 
-当前项目相关自定义 Skill：
+chem-wiki 的项目自定义 Skill 集合固定为：
 
 - `task-anchor`
 - `convergent-editing`
 - `compact-product-ui`
 - `integration-first`
 
-开始相关任务时确保本地副本与 upstream 当前版本一致。系统/框架提供的 debugging、TDD、verification、React 等 Skill 按任务需要调用，不复制成项目私有重复版本。
+开始相关任务时确保这四个本地副本与 upstream 当前版本一致。删除本地已经被这些 Skill 取代的旧名、重复或过时自定义副本；保留与其他项目有关的独立 Skill。系统/框架提供的 debugging、TDD、verification、React、planning 等 Skill 按任务需要调用，不复制成项目私有重复版本。

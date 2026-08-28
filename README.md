@@ -79,7 +79,16 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
 | 化学结构计算与解析 | RDKit |
 | 小分子交互式 3D | 3Dmol.js |
 
-下一阶段产品整合计划使用成熟 graph / chemistry typesetting 能力代替低价值自研；具体边界见 [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md)。
+下一阶段计划集成：
+
+| 能力 | 项目 |
+| --- | --- |
+| Element Wiki 局部知识图谱 | Cytoscape.js（必要时配合 fCoSE） |
+| 标准化学式 / 方程排版 | KaTeX + mhchem |
+
+新增化学计算能力前优先评估成熟生态，而不是继续自研底层算法。当前重点候选包括 ChemPy（无机/物化计算、平衡与动力学）、ChEMBL Structure Pipeline（结构标准化）、OPSIN（系统命名转结构）；Open Babel 只作为 RDKit 格式覆盖不足时的备选。CGRtools 可作为未来 reaction graph 设计参考，但当前不列为计划依赖。完整边界与选型状态见 [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md)。
+
+`awesome-cheminformatics` 等 curated list 仅作为候选发现入口；实际采用前必须重新检查当前维护状态、许可证、运行成本和与现有 owner 的重叠。
 
 ## 工程目录
 
@@ -87,7 +96,7 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
 - `backend/` — FastAPI、SQLAlchemy、Alembic、RDKit 与领域/应用模块。
 - `docs/handoffs/` — M00–M07 当前实现边界与交接。
 - `docs/decisions/` — durable architecture decisions。
-- `docs/PRODUCT_ROADMAP.md` — 产品方向、整合策略和阶段顺序。
+- `docs/PRODUCT_ROADMAP.md` — 产品方向、OSS 整合策略和阶段顺序。
 - `compose.yaml` — PostgreSQL 17 本地服务。
 
 ## 本地环境

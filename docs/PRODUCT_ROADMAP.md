@@ -4,13 +4,13 @@
 
 Chem Wiki is a connected high-school chemistry exploration system. Learners move continuously between elements, species, structures, reactions, experimental phenomena, and concepts instead of using isolated demo pages.
 
-The product should make the existing chemistry data foundation visible through three connected exploration loops:
+The product exposes the existing chemistry foundation through three connected exploration loops:
 
 1. **Element exploration** — Periodic Table → Element Wiki → ions/substances → reactions/concepts → Equation Lab.
 2. **Reaction exploration** — species → known reaction → equation/conditions/phenomena/concepts → related elements/structures.
 3. **Structure exploration** — species → structure → functional groups → related properties/reactions → Equation Lab.
 
-Mechanism/step animation work follows these connected product loops rather than preceding them.
+Reaction-process/mechanism work follows these connected loops rather than preceding them.
 
 ## Master
 
@@ -54,13 +54,13 @@ The frontend presents chemistry but does not become another chemistry-data owner
 
 Third-party projects own bounded technical responsibilities only. They do not become owners of canonical species, reactions, element properties, or learning semantics.
 
-Existing module contracts remain stable unless a later product requirement proves that a public boundary must change.
+Existing module contracts remain stable unless a product requirement proves that a public boundary must change.
 
 ## Integration strategy
 
 Development is integration-first.
 
-Before creating a new implementation, inspect:
+Before creating a new implementation, inspect in order:
 
 1. existing repository capability;
 2. existing installed dependency;
@@ -70,17 +70,43 @@ Before creating a new implementation, inspect:
 
 A new dependency is justified when it removes substantial low-value custom implementation or unlocks a connected product flow with acceptable license, maintenance, security, runtime and bundle cost.
 
-### Current mature OSS owners
+Curated lists such as `hsiaoyi0504/awesome-cheminformatics` are discovery indexes, not an approval list. Every candidate must be rechecked against its current upstream repository, maintenance status, license, platform cost and overlap with existing owners before adoption.
 
-| Responsibility | Canonical tool | Status |
+### Chemistry capability owners
+
+| Responsibility | Tool / owner | Status | Decision |
+| --- | --- | --- | --- |
+| canonical chemistry facts | `chem-knowledge-data` + application catalog modules | integrated | product truth owner |
+| molecule sketch/edit | Ketcher | integrated | keep |
+| chemistry/structure computation | RDKit | integrated | keep as primary structure engine |
+| interactive small-molecule 3D | 3Dmol.js | integrated | keep |
+| local knowledge-graph rendering/layout | Cytoscape.js (+ fCoSE when useful) | planned | integrate in Element Wiki |
+| standard chemistry/equation typesetting | KaTeX + mhchem | planned | integrate in Reaction experience |
+
+### Evaluate before custom chemistry computation
+
+These projects are candidates for specific gaps, not dependencies to install by default:
+
+| Candidate | Potential role | Current decision |
 | --- | --- | --- |
-| molecule sketch/edit | Ketcher | integrated |
-| chemistry/structure computation | RDKit | integrated |
-| interactive small-molecule 3D | 3Dmol.js | integrated |
-| local knowledge-graph rendering/layout | Cytoscape.js (+ fCoSE when useful) | next integration phase |
-| standard chemistry/equation typesetting | KaTeX + mhchem | next reaction-experience phase |
+| ChemPy | formula parsing, stoichiometry cross-checks, equilibria, kinetics and physical/inorganic calculations | high-priority evaluation before extending calculation features; do not replace stable M05 balance without a demonstrated gain |
+| ChEMBL Structure Pipeline | RDKit-based molecule validation/standardisation during structure-data ingestion | evaluate only if current structure import/normalisation produces a real consistency gap |
+| OPSIN | systematic IUPAC name → structure conversion | evaluate only when name-to-structure becomes a product requirement; account for Java/runtime cost |
+| Open Babel | broad chemical-format conversion | fallback only when RDKit/Ketcher format coverage is insufficient; GPL-2.0 distribution implications must be reviewed first |
+| CGRtools | reaction/condensed reaction-graph processing | research reference for future reaction-process work; current main upstream is not active enough to treat as a planned dependency |
 
-Do not add a second molecule editor, second chemistry engine, or second 3D viewer while the current owners satisfy the requirement.
+Projects with substantial overlap with existing owners, such as a second molecule editor or second general structure engine, are not added merely because they appear in an ecosystem list.
+
+## Skill strategy
+
+Project-specific custom Codex skills stay deliberately small:
+
+- `task-anchor` — iterative Outcome/Master/Locked/Delta/Deliverables continuity;
+- `convergent-editing` — one canonical current repository/artifact state;
+- `compact-product-ui` — dense, polished learner-facing product UI;
+- `integration-first` — repository/dependency/data/OSS audit before new capability work.
+
+Debugging, TDD, verification, React performance and similar framework skills are used from the system/framework when relevant rather than copied into the project skill repository.
 
 ## Phase 1 — Product integration reset
 
@@ -151,6 +177,8 @@ Planned product work:
 - visible canonical reaction conditions, phenomena, type and concepts;
 - navigation from a reaction to related species, elements and available structures.
 
+Before extending calculation responsibilities beyond the stable M05 core, evaluate ChemPy against the exact gap. Reuse it only where it removes meaningful custom chemistry computation and can live behind a narrow backend adapter.
+
 M05 EquationDraft remains the interaction/history anchor. Canonical Reaction completion remains a projection rather than a second draft owner.
 
 ## Phase 3 — Structure experience
@@ -165,15 +193,19 @@ Use accepted Structure links and the existing Ketcher/RDKit/3Dmol/FunctionalGrou
 - related known reactions;
 - transitions into Equation Lab.
 
+If structure-data normalisation becomes a demonstrated ingestion problem, evaluate ChEMBL Structure Pipeline before writing another standardiser. If systematic-name parsing becomes a demonstrated user need, evaluate OPSIN before custom parsing.
+
 ## Phase 4 — Reaction process / mechanism
 
 Mechanism work begins after the product can already navigate Reaction ↔ Species ↔ Structure.
 
-This phase may add reviewed bond changes, mechanism steps, electron-flow representations and animation where the data/model supports them. Mechanism truth remains separate from balance or atom-mapping inference.
+This phase may add reviewed bond changes, mechanism steps, electron-flow representations and animation where the data/model supports them. Before adding custom reaction-processing infrastructure, audit RDKit's current reaction capabilities and current maintained OSS. CGRtools may inform the design, but its current upstream state does not make it an approved dependency.
+
+Mechanism truth remains separate from balance or atom-mapping inference.
 
 ## Documentation ownership
 
-- `docs/PRODUCT_ROADMAP.md` — canonical product direction, integration strategy and current phases.
+- `docs/PRODUCT_ROADMAP.md` — canonical product direction, integration strategy, chemistry OSS registry and current phases.
 - `docs/handoffs/Mxx.md` — current implemented module capability and public boundary.
 - `docs/decisions/` — durable architecture decisions whose scope is narrower than this roadmap.
 - `README.md` — concise current product entry point and local setup.
