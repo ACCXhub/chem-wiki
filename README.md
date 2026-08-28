@@ -1,24 +1,107 @@
 # chem-wiki
 
-高中化学交互式 Wiki 知识图谱与反应机理学习系统。
+高中化学交互式 Wiki 知识图谱与反应学习系统。
 
-M00 提供可运行、可测试的 React + FastAPI + PostgreSQL 工程骨架，不包含 M01+ 领域功能。
+Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续探索的学习路径，而不是把周期表、方程式和分子结构做成彼此独立的工具页。
 
-## 前置环境
+## 当前能力
 
-- Node.js 24、npm 11
-- Python 3.13、uv 0.12.5
-- Docker Desktop 与 Docker Compose
+当前 `main` 已完成 M00–M07 的阶段能力，包括：
 
-## 目录边界
+- React + TypeScript 前端、FastAPI + PostgreSQL 后端；
+- Chemistry Core 领域身份与模块边界；
+- 118 元素周期表、元素属性数据与 Element Wiki；
+- EquationDraft、物态、拖放、重排、左右移动、Undo/Redo、复制；
+- 分子方程式、离子方程式、净离子方程式配平；
+- consolidated `knowledge_catalog`；
+- 已知 Reaction 候选匹配、方向/可逆方向、补全与稳定排序；
+- Structure Lab；
+- Ketcher 分子绘制；
+- RDKit 结构解析、描述符、2D/3D 数据生成与官能团识别；
+- 3Dmol.js 交互式三维分子展示；
+- 紧凑的 Equation Lab 物质库、收藏/最近和 Builder 交互。
 
-- `frontend/`：Vite、React、TypeScript，以及 ESLint、Vitest、Testing Library。
-- `backend/`：FastAPI composition root、数据库基础设施、Alembic、pytest、Ruff。
-- `compose.yaml`：本地 PostgreSQL 17 服务。
+当前产品重心是把这些能力连接成连续学习流程。长期方向见 [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md)。
+
+## 核心探索路径
+
+### 元素探索
+
+```text
+元素周期表
+  → Element Wiki
+  → 离子 / 物质
+  → 相关反应 / 概念 / 现象
+  → 方程实验室
+```
+
+### 反应探索
+
+```text
+物质 / 离子
+  → 已知反应
+  → 方程 / 条件 / 现象 / 概念
+  → 相关元素 / 结构
+```
+
+### 结构探索
+
+```text
+物质
+  → 2D / 3D 结构
+  → 官能团
+  → 相关物质 / 反应
+  → 方程实验室
+```
+
+## 数据底座
+
+应用通过 `knowledge_catalog` 和 `element_data` 消费 canonical 数据，不在 React 中维护第二套化学事实。
+
+当前 consolidated consumer release 约包含：
+
+- 309 species；
+- 183 reactions；
+- 69 accepted Structure links；
+- 309 teaching projections；
+- 637 non-species knowledge records；
+- reviewed rules / curriculum projections。
+
+数据整合仓库：`ACCXhub/chem-knowledge-data`。
+
+## 成熟开源能力
+
+当前已经集成并继续作为对应职责 owner：
+
+| 能力 | 项目 |
+| --- | --- |
+| 分子绘制 / 编辑 | Ketcher |
+| 化学结构计算与解析 | RDKit |
+| 小分子交互式 3D | 3Dmol.js |
+
+下一阶段产品整合计划使用成熟 graph / chemistry typesetting 能力代替低价值自研；具体边界见 [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md)。
+
+## 工程目录
+
+- `frontend/` — React、TypeScript、Vite、Vitest，以及各产品模块前端。
+- `backend/` — FastAPI、SQLAlchemy、Alembic、RDKit 与领域/应用模块。
+- `docs/handoffs/` — M00–M07 当前实现边界与交接。
+- `docs/decisions/` — durable architecture decisions。
+- `docs/PRODUCT_ROADMAP.md` — 产品方向、整合策略和阶段顺序。
+- `compose.yaml` — PostgreSQL 17 本地服务。
+
+## 本地环境
+
+- Node.js 24
+- npm 11
+- Python 3.13
+- uv 0.12.x
+- Docker Desktop / Docker Compose
+- PostgreSQL 17
 
 ## 本地运行
 
-以下命令使用 PowerShell，并从仓库根目录开始执行。
+以下命令从仓库根目录执行。
 
 ```powershell
 Copy-Item .env.example .env
@@ -36,7 +119,13 @@ uv sync --locked --dev
 uv run uvicorn chem_wiki.main:app --app-dir src
 ```
 
-`GET http://127.0.0.1:8000/health` 应返回 `{"status":"ok"}`。启动前端：
+后端健康检查：
+
+```text
+GET http://127.0.0.1:8000/health
+```
+
+启动前端：
 
 ```powershell
 Set-Location frontend
@@ -46,11 +135,9 @@ npm run dev
 
 ## 验证
 
-```powershell
-docker compose --env-file .env.example up -d --wait postgres
-$databaseUrlLine = Get-Content .env.example | Where-Object { $_ -like 'DATABASE_URL=*' }
-$env:DATABASE_URL = $databaseUrlLine.Substring('DATABASE_URL='.Length)
+按改动风险优先运行直接相关的聚焦检查。需要完整验证时可使用：
 
+```powershell
 Set-Location frontend
 npm run lint
 npm run test:run
@@ -59,11 +146,14 @@ npm run build
 Set-Location ..\backend
 uv run ruff check .
 uv run ruff format --check .
-uv run alembic upgrade head
 uv run pytest -q
-
-Set-Location ..
-docker compose --env-file .env.example down
 ```
 
-FastAPI 只在 composition root 装配路由；SQLAlchemy 与 session factory 仅位于基础设施层。未来 Port 由实际使用它的模块定义，只有出现真实复用时才建立 shared 能力。
+FastAPI 只在 composition root 装配路由；数据库基础设施保持在后端基础设施边界。模块通过公开接口协作，共享层只承载已经出现真实复用需求且边界稳定的能力。
+
+## 文档导航
+
+- [Product Roadmap](docs/PRODUCT_ROADMAP.md)
+- [M00–M07 handoffs](docs/handoffs/)
+- [Architecture decisions](docs/decisions/)
+- [Project agent rules](AGENTS.md)
