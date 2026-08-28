@@ -9,6 +9,7 @@ interface SpeciesBlockProps {
   species: CatalogSpecies
   isFavorite?: boolean
   isRecent?: boolean
+  showChineseNames?: boolean
   favoriteLabel?: string
   onFavorite?: (species: CatalogSpecies) => void
   onAddToSide: (side: DraftSide, species: CatalogSpecies) => void
@@ -29,6 +30,7 @@ export default function SpeciesBlock({
   species,
   isFavorite = false,
   isRecent = false,
+  showChineseNames = true,
   favoriteLabel,
   onFavorite,
   onAddToSide,
@@ -79,7 +81,7 @@ export default function SpeciesBlock({
       title={species.nameEn ?? undefined}
     >
       <ChemistryNotation formula={species.formula} charge={species.charge} />
-      <strong>{species.nameZh}</strong>
+      {showChineseNames ? <strong>{species.nameZh}</strong> : null}
       {onFavorite ? (
         <button
           type="button"
@@ -91,7 +93,7 @@ export default function SpeciesBlock({
           {isFavorite ? '★' : '☆'}
         </button>
       ) : null}
-      {isRecent ? <span className="recent-label">最近</span> : null}
+      {isRecent && !isFavorite ? <span className="recent-marker" aria-label="最近使用" title="最近使用">•</span> : null}
       {placementOpen ? (
         <div className="species-placement" aria-label={`放置${species.nameZh}`}>
           <button type="button" onClick={(event) => add(event, 'reactants')}>放入反应物</button>

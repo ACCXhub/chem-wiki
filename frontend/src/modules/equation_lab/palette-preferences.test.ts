@@ -5,6 +5,7 @@ import {
   resolvePaletteSpecies,
   recordPaletteRecent,
   savePalettePreferences,
+  setPaletteChineseNames,
   togglePaletteFavorite,
 } from './palette-preferences'
 import type { CatalogSpecies } from './types'
@@ -35,12 +36,22 @@ test('persists identity-based favorites and recents while ignoring unsupported s
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
   } as unknown as Storage
-  let preferences = togglePaletteFavorite({ favorites: [], recents: [] }, 'water')
+  let preferences = togglePaletteFavorite({ favorites: [], recents: [], showChineseNames: true }, 'water')
   preferences = recordPaletteRecent(preferences, 'water')
+  preferences = setPaletteChineseNames(preferences, false)
   savePalettePreferences(preferences, localStorage)
   storage.set('bad', 'invalid')
 
-  expect(loadPalettePreferences(localStorage)).toEqual({ favorites: ['water'], recents: ['water'] })
+  expect(loadPalettePreferences(localStorage)).toEqual({ favorites: ['water'], recents: ['water'], showChineseNames: false })
   expect(resolvePaletteSpecies([species('hydrogen'), species('water')], preferences.favorites).map((item) => item.applicationId))
     .toEqual(['water'])
+})
+
+test('loads legacy favorites and recents with Chinese names enabled by default', () => {
+  const storage = {
+    getItem: () => JSON.stringify({ version: 1, favorites: ['water'], recents: ['water'] }),
+    setItem: () => undefined,
+  } as unknown as Storage
+
+  expect(loadPalettePreferences(storage)).toEqual({ favorites: ['water'], recents: ['water'], showChineseNames: true })
 })

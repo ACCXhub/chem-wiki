@@ -6,9 +6,14 @@ const MAX_RECENTS = 8
 export interface PalettePreferences {
   favorites: string[]
   recents: string[]
+  showChineseNames: boolean
 }
 
-const EMPTY_PREFERENCES: PalettePreferences = { favorites: [], recents: [] }
+const EMPTY_PREFERENCES: PalettePreferences = {
+  favorites: [],
+  recents: [],
+  showChineseNames: true,
+}
 
 function uniqueIds(values: unknown): string[] {
   if (!Array.isArray(values)) return []
@@ -19,9 +24,18 @@ export function loadPalettePreferences(storage: Storage = window.localStorage): 
   try {
     const parsed: unknown = JSON.parse(storage.getItem(STORAGE_KEY) ?? 'null')
     if (!parsed || typeof parsed !== 'object') return EMPTY_PREFERENCES
-    const value = parsed as { version?: unknown; favorites?: unknown; recents?: unknown }
+    const value = parsed as {
+      version?: unknown
+      favorites?: unknown
+      recents?: unknown
+      showChineseNames?: unknown
+    }
     if (value.version !== 1) return EMPTY_PREFERENCES
-    return { favorites: uniqueIds(value.favorites), recents: uniqueIds(value.recents).slice(0, MAX_RECENTS) }
+    return {
+      favorites: uniqueIds(value.favorites),
+      recents: uniqueIds(value.recents).slice(0, MAX_RECENTS),
+      showChineseNames: value.showChineseNames !== false,
+    }
   } catch {
     return EMPTY_PREFERENCES
   }
@@ -56,6 +70,13 @@ export function recordPaletteRecent(
     recents: [applicationId, ...preferences.recents.filter((id) => id !== applicationId)]
       .slice(0, MAX_RECENTS),
   }
+}
+
+export function setPaletteChineseNames(
+  preferences: PalettePreferences,
+  showChineseNames: boolean,
+): PalettePreferences {
+  return { ...preferences, showChineseNames }
 }
 
 export function resolvePaletteSpecies(

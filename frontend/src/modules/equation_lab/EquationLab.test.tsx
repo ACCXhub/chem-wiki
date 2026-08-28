@@ -222,12 +222,14 @@ test('preserves invalid errors and the approved no-net-ionic result in direct in
     />,
   )
 
+  fireEvent.click(screen.getByRole('button', { name: '净离子方程式' }))
+  fireEvent.click(screen.getByRole('button', { name: '手动输入' }))
   fireEvent.change(screen.getByLabelText('化学方程式'), { target: { value: 'H2 -> H2O' } })
-  fireEvent.click(screen.getByRole('button', { name: '直接配平', hidden: true }))
+  fireEvent.click(screen.getByRole('button', { name: '直接配平' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('方程式没有非零守恒解')
 
   fireEvent.click(screen.getByText('无净反应示例'))
-  fireEvent.click(screen.getByRole('button', { name: '直接配平', hidden: true }))
+  fireEvent.click(screen.getByRole('button', { name: '直接配平' }))
   expect(await screen.findByText('普通水溶液中无净离子反应')).toBeInTheDocument()
   expect(screen.queryByText('生成物', { selector: 'th, td' })).not.toBeInTheDocument()
 })
@@ -349,7 +351,7 @@ test('keeps direct catalog selection primary while exposing the controlled build
   await screen.findByText('氢气')
   expect(screen.getByRole('button', { name: '搜索物质' })).toHaveAttribute('aria-pressed', 'true')
   fireEvent.click(screen.getByRole('button', { name: '构建物质' }))
-  expect(screen.getByRole('heading', { name: '受控构建' })).toBeInTheDocument()
+  expect(screen.getByRole('region', { name: '构建物质' })).toBeInTheDocument()
 })
 
 test('resolves controlled sodium and sulfate blocks to the existing catalog species and draft', async () => {
@@ -376,9 +378,10 @@ test('resolves controlled sodium and sulfate blocks to the existing catalog spec
   expect(await screen.findByRole('button', { name: '添加钠离子' })).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '添加钠离子' }))
   fireEvent.click(screen.getByRole('button', { name: '添加钠离子' }))
+  fireEvent.click(screen.getByRole('button', { name: '阴离子' }))
   fireEvent.click(screen.getByRole('button', { name: '添加硫酸根离子' }))
 
-  expect(await screen.findByText('已找到 1 个已知物质。')).toBeInTheDocument()
+  expect(await screen.findByText('1 个匹配')).toBeInTheDocument()
   await waitFor(() => expect(onSearch).toHaveBeenLastCalledWith({
     composition: { Na: 2, O: 4, S: 1 },
     charge: 0,
@@ -418,15 +421,16 @@ test('shows multiple and no controlled composition matches without synthesizing 
 
   await screen.findByText('氢气')
   fireEvent.click(screen.getByRole('button', { name: '构建物质' }))
+  fireEvent.click(screen.getByRole('button', { name: '元素' }))
   expect(await screen.findByRole('button', { name: '添加碳' })).toBeInTheDocument()
   for (let count = 0; count < 4; count += 1) fireEvent.click(screen.getByRole('button', { name: '添加碳' }))
   for (let count = 0; count < 8; count += 1) fireEvent.click(screen.getByRole('button', { name: '添加氢' }))
-  expect(await screen.findByText('已找到 2 个有效候选，请选择。')).toBeInTheDocument()
+  expect(await screen.findByText('2 个匹配')).toBeInTheDocument()
   expect(screen.getByText('1-丁烯')).toBeInTheDocument()
   expect(screen.getByText('顺-2-丁烯')).toBeInTheDocument()
 
   fireEvent.click(screen.getByRole('button', { name: '增加氢' }))
-  expect(await screen.findByText('没有匹配的已知目录物质；不会创建新的物质 identity。')).toBeInTheDocument()
+  expect(await screen.findByText('未找到匹配物质')).toBeInTheDocument()
 })
 
 test('persists a direct palette favorite and recent use across reload', async () => {
@@ -443,7 +447,45 @@ test('persists a direct palette favorite and recent use across reload', async ()
     <EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={() => Promise.resolve(molecularCatalog)} />,
   )
   expect(await screen.findByRole('button', { name: '取消收藏水' })).toBeInTheDocument()
-  expect(screen.getByText('最近')).toBeInTheDocument()
+  expect(screen.queryByLabelText('最近使用')).not.toBeInTheDocument()
+})
+
+test('keeps quick species in one compact flow and hides their duplicate catalog blocks until searching', async () => {
+  const view = render(
+    <EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={() => Promise.resolve(molecularCatalog)} />,
+  )
+  await screen.findByText('氢气')
+  fireEvent.click(screen.getByRole('button', { name: '收藏水' }))
+  addMaterial('水', 'reactants')
+  view.unmount()
+
+  render(
+    <EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={() => Promise.resolve(molecularCatalog)} />,
+  )
+  const quickFlow = await screen.findByRole('region', { name: '快捷物质' })
+  expect(within(quickFlow).getAllByRole('article', { name: '拖拽物质 水' })).toHaveLength(1)
+  expect(screen.getAllByRole('article', { name: '拖拽物质 水' })).toHaveLength(1)
+
+  fireEvent.change(screen.getByRole('searchbox'), { target: { value: '水' } })
+  await waitFor(() => expect(screen.getAllByRole('article', { name: '拖拽物质 水' })).toHaveLength(2))
+})
+
+test('toggles palette Chinese names immediately and persists the display preference', async () => {
+  const first = render(
+    <EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={() => Promise.resolve(molecularCatalog)} />,
+  )
+  await screen.findByText('氢气')
+  fireEvent.click(screen.getByRole('button', { name: '隐藏中文名' }))
+  expect(material('氢气')).toHaveTextContent('H₂')
+  expect(material('氢气')).not.toHaveTextContent('氢气')
+  first.unmount()
+
+  render(
+    <EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={() => Promise.resolve(molecularCatalog)} />,
+  )
+  expect(await screen.findByRole('button', { name: '显示中文名' })).toBeInTheDocument()
+  await screen.findByRole('article', { name: '拖拽物质 氢气' })
+  expect(material('氢气')).not.toHaveTextContent('氢气')
 })
 
 test('hydrates saved long-tail favorites and recents separately from the default catalog after reload', async () => {
@@ -469,22 +511,20 @@ test('hydrates saved long-tail favorites and recents separately from the default
     <EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={onSearch} />,
   )
 
-  const quickAccess = await screen.findByRole('region', { name: '快捷访问' })
-  expect(within(quickAccess).getByText('收藏')).toBeInTheDocument()
-  fireEvent.click(within(quickAccess).getByRole('button', { name: '从收藏移除甲苯' }))
-  expect(await within(quickAccess).findByText('最近')).toBeInTheDocument()
+  const quickAccess = await screen.findByRole('region', { name: '快捷物质' })
+  fireEvent.click(within(quickAccess).getByRole('button', { name: '取消收藏甲苯' }))
+  expect(await within(quickAccess).findByLabelText('最近使用')).toBeInTheDocument()
   addMaterial('甲苯', 'products', quickAccess)
   expect(screen.getByRole('region', { name: '生成物' })).toHaveTextContent('甲苯')
   expect(window.localStorage.getItem('chem-wiki.equation-lab.palette-preferences.v1'))
-    .toBe(JSON.stringify({ version: 1, favorites: [], recents: ['long-tail'] }))
+    .toBe(JSON.stringify({ version: 1, favorites: [], recents: ['long-tail'], showChineseNames: true }))
   second.unmount()
 
   render(
     <EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={onSearch} />,
   )
-  const reloadedQuickAccess = await screen.findByRole('region', { name: '快捷访问' })
-  expect(within(reloadedQuickAccess).queryByText('收藏')).not.toBeInTheDocument()
-  expect(within(reloadedQuickAccess).getByText('最近')).toBeInTheDocument()
+  const reloadedQuickAccess = await screen.findByRole('region', { name: '快捷物质' })
+  expect(within(reloadedQuickAccess).getByLabelText('最近使用')).toBeInTheDocument()
 })
 
 test('removes stale saved palette identities without breaking the normal catalog', async () => {
@@ -502,6 +542,6 @@ test('removes stale saved palette identities without breaking the normal catalog
 
   expect(await screen.findByText('氢气')).toBeInTheDocument()
   await waitFor(() => expect(window.localStorage.getItem('chem-wiki.equation-lab.palette-preferences.v1'))
-    .toBe(JSON.stringify({ version: 1, favorites: [], recents: [] })))
-  expect(screen.queryByRole('region', { name: '快捷访问' })).not.toBeInTheDocument()
+    .toBe(JSON.stringify({ version: 1, favorites: [], recents: [], showChineseNames: true })))
+  expect(screen.queryByRole('region', { name: '快捷物质' })).not.toBeInTheDocument()
 })

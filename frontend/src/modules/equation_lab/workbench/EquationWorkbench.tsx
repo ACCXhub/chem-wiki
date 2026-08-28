@@ -31,6 +31,7 @@ interface EquationWorkbenchProps {
   duplicatePulse: string | null
   canUndo: boolean
   canRedo: boolean
+  manualInputOpen: boolean
   onSubmit: (event: FormEvent) => void
   onModeChange: (mode: EquationMode) => void
   onAutoBalanceChange: (enabled: boolean) => void
@@ -38,6 +39,7 @@ interface EquationWorkbenchProps {
   onUndo: () => void
   onRedo: () => void
   onCopy: () => Promise<void>
+  onManualInputToggle: () => void
   onRemove: (side: DraftSide, applicationId: string) => void
   onPhase: (side: DraftSide, applicationId: string, phase: EquationPhase | null) => void
   onWorkbenchDragOver: (event: DragEvent<HTMLElement>) => void
@@ -71,6 +73,7 @@ export default function EquationWorkbench({
   duplicatePulse,
   canUndo,
   canRedo,
+  manualInputOpen,
   onSubmit,
   onModeChange,
   onAutoBalanceChange,
@@ -78,6 +81,7 @@ export default function EquationWorkbench({
   onUndo,
   onRedo,
   onCopy,
+  onManualInputToggle,
   onRemove,
   onPhase,
   onWorkbenchDragOver,
@@ -115,6 +119,7 @@ export default function EquationWorkbench({
           <button className="history-button" type="button" onClick={onUndo} disabled={!canUndo} aria-label="撤销">↶</button>
           <button className="history-button" type="button" onClick={onRedo} disabled={!canRedo} aria-label="重做">↷</button>
           <button className="copy-equation" type="button" onClick={copy} disabled={!reactants.length && !products.length}>{copied ? '已复制' : '复制'}</button>
+          <button className="manual-input-toggle" type="button" aria-expanded={manualInputOpen} onClick={onManualInputToggle}>手动输入</button>
           <button className="clear-draft" type="button" onClick={onClearDraft} disabled={!draft.reactants.length && !draft.products.length}>清空</button>
         </div>
       </div>

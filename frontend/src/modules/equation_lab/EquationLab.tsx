@@ -21,6 +21,7 @@ import {
   recordPaletteRecent,
   resolvePaletteSpecies,
   savePalettePreferences,
+  setPaletteChineseNames,
   togglePaletteFavorite,
 } from './palette-preferences'
 import type {
@@ -79,26 +80,17 @@ interface EquationLabViewProps extends EquationLabProps {
 const EXAMPLES: Array<{
   label: string
   equation: string
-  mode: EquationMode
 }> = [
-  { label: '水的生成', equation: 'H2 + O2 -> H2O', mode: 'molecular' },
+  { label: '水的生成', equation: 'H2 + O2 -> H2O' },
   {
     label: '沉淀示例',
     equation: 'Ag+(aq) + Cl-(aq) -> AgCl(s)',
-    mode: 'net_ionic',
   },
   {
     label: '无净反应示例',
     equation: 'Na+(aq) + NO3-(aq)',
-    mode: 'net_ionic',
   },
 ]
-
-const MODE_LABELS: Record<EquationMode, string> = {
-  molecular: '分子方程式',
-  ionic: '离子方程式',
-  net_ionic: '净离子方程式',
-}
 
 const CATEGORY_OPTIONS = [
   ['', '全部'],
@@ -187,7 +179,7 @@ export function EquationLabView({
   const [builderError, setBuilderError] = useState<string | null>(null)
   const [showAllElements, setShowAllElements] = useState(false)
   const [directEquation, setDirectEquation] = useState(EXAMPLES[0].equation)
-  const [directMode, setDirectMode] = useState<EquationMode>(EXAMPLES[0].mode)
+  const [manualInputOpen, setManualInputOpen] = useState(false)
   const [result, setResult] = useState<BalanceEquationResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -258,6 +250,7 @@ export function EquationLabView({
         const next = {
           favorites: current.favorites.filter((id) => !unavailableIds.includes(id)),
           recents: current.recents.filter((id) => !unavailableIds.includes(id)),
+          showChineseNames: current.showChineseNames,
         }
         if (
           next.favorites.length === current.favorites.length
@@ -345,6 +338,20 @@ export function EquationLabView({
       preferences.recents.filter((id) => !preferences.favorites.includes(id)),
     ),
     [preferences.favorites, preferences.recents, quickAccessSpecies, savedApplicationIds.length],
+  )
+  const quickSpecies = useMemo(
+    () => [...favoriteSpecies, ...recentSpecies.filter(
+      (item) => !preferences.favorites.includes(item.applicationId),
+    )],
+    [favoriteSpecies, preferences.favorites, recentSpecies],
+  )
+  const quickSpeciesIds = useMemo(
+    () => new Set(quickSpecies.map((item) => item.applicationId)),
+    [quickSpecies],
+  )
+  const visibleCatalog = useMemo(
+    () => query.trim() ? catalog : catalog.filter((item) => !quickSpeciesIds.has(item.applicationId)),
+    [catalog, query, quickSpeciesIds],
   )
 
   const reactionAnchorKey = useMemo(() => JSON.stringify({
@@ -435,12 +442,11 @@ export function EquationLabView({
   const handleDirectSubmit = (event: FormEvent) => {
     event.preventDefault()
     if (!directEquation.trim()) return
-    void runBalance(directEquation.trim(), directMode)
+    void runBalance(directEquation.trim(), draft.mode)
   }
 
   const chooseExample = (example: (typeof EXAMPLES)[number]) => {
     setDirectEquation(example.equation)
-    setDirectMode(example.mode)
     invalidateBalance()
   }
 
@@ -630,6 +636,7 @@ export function EquationLabView({
         duplicatePulse={duplicatePulse}
         canUndo={history.past.length > 0}
         canRedo={history.future.length > 0}
+        manualInputOpen={manualInputOpen}
         onSubmit={handleComposerSubmit}
         onModeChange={changeMode}
         onAutoBalanceChange={setAutoBalance}
@@ -637,6 +644,7 @@ export function EquationLabView({
         onUndo={undo}
         onRedo={redo}
         onCopy={copyEquation}
+        onManualInputToggle={() => setManualInputOpen((open) => !open)}
         onRemove={(side, id) => changeSide(side, (items) => items.filter((item) => item.applicationId !== id))}
         onPhase={(side, id, phase) => changeSide(side, (items) => updateParticipantPhase(items, id, phase))}
         onWorkbenchDragOver={handleWorkbenchDragOver}
@@ -646,6 +654,26 @@ export function EquationLabView({
         onDrop={handleDrop}
         onDragEnd={clearDrag}
       />
+
+      {manualInputOpen ? (
+        <form className="manual-equation-input" onSubmit={handleDirectSubmit}>
+          <input
+            id="direct-equation"
+            aria-label="化学方程式"
+            value={directEquation}
+            onChange={(event) => setDirectEquation(event.target.value)}
+            placeholder="输入完整方程式"
+            spellCheck={false}
+          />
+          <span>{draft.mode === 'molecular' ? '分子' : draft.mode === 'ionic' ? '离子' : '净离子'}模式</span>
+          <div className="lab-examples" aria-label="方程式示例">
+            {EXAMPLES.map((example) => (
+              <button key={example.label} type="button" onClick={() => chooseExample(example)}>{example.label}</button>
+            ))}
+          </div>
+          <button type="submit" disabled={loading || !directEquation.trim()}>直接配平</button>
+        </form>
+      ) : null}
 
       <ReactionCandidates
         candidates={reactionCandidates}
@@ -657,8 +685,23 @@ export function EquationLabView({
 
       <section className="species-palette" aria-labelledby="palette-heading">
           <div className="lab-heading compact">
-            <div><p className="eyebrow">Known materials</p><h2 id="palette-heading">物质库</h2></div>
-            <span>{catalogLoading ? '查询中…' : `${catalog.length} 项`}</span>
+            <h2 id="palette-heading">物质库</h2>
+            <div className="palette-heading-actions">
+              <span>{catalogLoading ? '查询中…' : `${catalog.length} 项`}</span>
+              <button
+                className="name-display-toggle"
+                type="button"
+                aria-pressed={preferences.showChineseNames}
+                aria-label={preferences.showChineseNames ? '隐藏中文名' : '显示中文名'}
+                onClick={() => setPreferences((current) => {
+                  const next = setPaletteChineseNames(current, !current.showChineseNames)
+                  savePalettePreferences(next)
+                  return next
+                })}
+              >
+                中文名{preferences.showChineseNames ? ' ✓' : ''}
+              </button>
+            </div>
           </div>
           <div className="palette-mode-switch" role="group" aria-label="物质选择方式">
             <button type="button" aria-pressed={paletteMode === 'search'} onClick={() => setPaletteMode('search')}>搜索物质</button>
@@ -686,27 +729,21 @@ export function EquationLabView({
               </button>
               ))}
             </div>
-            {favoriteSpecies.length || recentSpecies.length ? (
-              <section className="palette-quick-access" aria-label="快捷访问">
-                {favoriteSpecies.length ? (
-                  <QuickAccessGroup
-                    title="收藏"
-                    species={favoriteSpecies}
+            {quickSpecies.length ? (
+              <section className="quick-species-flow" aria-label="快捷物质">
+                {quickSpecies.map((species) => (
+                  <SpeciesBlock
+                    key={species.applicationId}
+                    species={species}
+                    isFavorite={preferences.favorites.includes(species.applicationId)}
+                    isRecent={preferences.recents.includes(species.applicationId)}
+                    showChineseNames={preferences.showChineseNames}
+                    onFavorite={toggleFavorite}
                     onAddToSide={addToSide}
-                    onRemoveFavorite={toggleFavorite}
-                    onDragStart={(species) => setDraggedItem({ kind: 'species', species })}
+                    onDragStart={(item) => setDraggedItem({ kind: 'species', species: item })}
                     onDragEnd={clearDrag}
                   />
-                ) : null}
-                {recentSpecies.length ? (
-                  <QuickAccessGroup
-                    title="最近"
-                    species={recentSpecies}
-                    onAddToSide={addToSide}
-                    onDragStart={(species) => setDraggedItem({ kind: 'species', species })}
-                    onDragEnd={clearDrag}
-                  />
-                ) : null}
+                ))}
               </section>
             ) : null}
             {catalogError ? <div className="catalog-state is-error" role="alert">{catalogError}</div> : null}
@@ -714,7 +751,7 @@ export function EquationLabView({
               <div className="catalog-state">没有匹配当前搜索与分类的物质。</div>
             ) : null}
             <div className="species-list" aria-live="polite" onDragOver={autoScrollPalette}>
-              {catalog.map((species) => {
+              {visibleCatalog.map((species) => {
               const isFavorite = preferences.favorites.includes(species.applicationId)
               const isRecent = preferences.recents.includes(species.applicationId)
               return (
@@ -723,6 +760,7 @@ export function EquationLabView({
                   species={species}
                   isFavorite={isFavorite}
                   isRecent={isRecent}
+                  showChineseNames={preferences.showChineseNames}
                   onFavorite={toggleFavorite}
                   onAddToSide={addToSide}
                   onDragStart={(item) => setDraggedItem({ kind: 'species', species: item })}
@@ -748,82 +786,11 @@ export function EquationLabView({
             onAddToSide={addToSide}
             onDragStart={(species) => setDraggedItem({ kind: 'species', species })}
             onDragEnd={clearDrag}
+            showChineseNames={preferences.showChineseNames}
           />}
       </section>
 
-      <details className="advanced-equation-input">
-        <summary>高级：直接输入完整方程式</summary>
-        <form onSubmit={handleDirectSubmit}>
-          <div className="lab-examples" aria-label="方程式示例">
-            {EXAMPLES.map((example) => (
-              <button key={example.label} type="button" onClick={() => chooseExample(example)}>
-                {example.label}
-              </button>
-            ))}
-          </div>
-          <label htmlFor="direct-equation">化学方程式</label>
-          <textarea
-            id="direct-equation"
-            value={directEquation}
-            onChange={(event) => setDirectEquation(event.target.value)}
-            spellCheck={false}
-            rows={3}
-          />
-          <label htmlFor="direct-equation-mode">表示层级</label>
-          <select
-            id="direct-equation-mode"
-            value={directMode}
-            onChange={(event) => setDirectMode(event.target.value as EquationMode)}
-          >
-            {Object.entries(MODE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <button type="submit" disabled={loading || !directEquation.trim()}>直接配平</button>
-        </form>
-      </details>
-
     </main>
-  )
-}
-
-interface QuickAccessGroupProps {
-  title: string
-  species: CatalogSpecies[]
-  onAddToSide: (side: DraftSide, species: CatalogSpecies) => void
-  onRemoveFavorite?: (species: CatalogSpecies) => void
-  onDragStart: (species: CatalogSpecies) => void
-  onDragEnd: () => void
-}
-
-function QuickAccessGroup({
-  title,
-  species,
-  onAddToSide,
-  onRemoveFavorite,
-  onDragStart,
-  onDragEnd,
-}: QuickAccessGroupProps) {
-  return (
-    <div className="quick-access-group">
-      <h3>{title}</h3>
-      <div className="quick-access-list">
-        {species.map((item) => {
-          return (
-            <SpeciesBlock
-              key={item.applicationId}
-              species={item}
-              isFavorite={Boolean(onRemoveFavorite)}
-              favoriteLabel={onRemoveFavorite ? `从收藏移除${item.nameZh}` : undefined}
-              onFavorite={onRemoveFavorite}
-              onAddToSide={onAddToSide}
-              onDragStart={onDragStart}
-              onDragEnd={onDragEnd}
-            />
-          )
-        })}
-      </div>
-    </div>
   )
 }
 
@@ -844,6 +811,7 @@ interface SpeciesBuilderProps {
   onAddToSide: (side: DraftSide, species: CatalogSpecies) => void
   onDragStart: (species: CatalogSpecies) => void
   onDragEnd: () => void
+  showChineseNames: boolean
 }
 
 function SpeciesBuilder({
@@ -863,7 +831,9 @@ function SpeciesBuilder({
   onAddToSide,
   onDragStart,
   onDragEnd,
+  showChineseNames,
 }: SpeciesBuilderProps) {
+  const [source, setSource] = useState<'cation' | 'anion' | 'element'>('cation')
   const visibleElements = showAllElements
     ? elements
     : elements.filter((element) => COMMON_ELEMENT_SYMBOLS.has(element.symbol))
@@ -875,73 +845,76 @@ function SpeciesBuilder({
     const block = ionBlock(species)
     return block ? [block] : []
   })
+  const sourceBlocks = source === 'cation'
+    ? cationBlocks
+    : source === 'anion'
+      ? anionBlocks
+      : visibleElements.map(elementBlock)
+  const sourceLabel = source === 'cation'
+    ? '阳离子'
+    : source === 'anion'
+      ? '阴离子'
+      : showAllElements ? '全部元素' : '常用元素'
   return (
-    <section className="species-builder" aria-labelledby="builder-heading">
-      <div className="builder-heading">
-        <div><p className="eyebrow">Catalog resolution</p><h2 id="builder-heading">受控构建</h2></div>
-        <span>只匹配已有目录物质</span>
-      </div>
-      <p className="builder-intro">从元素与目录离子组成配方，再按组成和总电荷查找已知物质。</p>
+    <section className="species-builder" aria-label="构建物质">
       {error ? <div className="catalog-state is-error" role="alert">{error}</div> : null}
-      <BuilderBlockGroup title="常用阳离子" blocks={cationBlocks} onAddBlock={onAddBlock} />
-      <BuilderBlockGroup title="阴离子 / 多原子离子" blocks={anionBlocks} onAddBlock={onAddBlock} />
-      <BuilderBlockGroup
-        title={showAllElements ? '全部元素' : '常用元素'}
-        blocks={visibleElements.map(elementBlock)}
-        onAddBlock={onAddBlock}
-      />
-      {elements.length > visibleElements.length || showAllElements ? (
-        <button className="show-elements" type="button" onClick={onShowAllElements}>
-          {showAllElements ? '收起到常用元素' : `显示全部 ${elements.length} 个元素`}
-        </button>
-      ) : null}
-      <div className="builder-tray" aria-label="组成托盘">
-        <div className="builder-tray-heading">
-          <strong>组成托盘</strong>
-          <button type="button" onClick={onClear} disabled={!tray.length}>清空</button>
-        </div>
-        {!tray.length ? <p>添加受控块后，在此查看组成与总电荷。</p> : (
-          <div className="tray-entries">
-            {tray.map((entry) => (
-              <div className="tray-entry" key={entry.block.id}>
-                <ChemistryNotation formula={entry.block.formula} charge={entry.block.charge} />
-                <span>{entry.block.label}</span>
-                <div className="tray-count">
-                  <button type="button" onClick={() => onAdjustBlock(entry.block.id, -1)} aria-label={`减少${entry.block.label}`}>−</button>
-                  <strong>× {entry.count}</strong>
-                  <button type="button" onClick={() => onAdjustBlock(entry.block.id, 1)} aria-label={`增加${entry.block.label}`}>+</button>
-                </div>
-              </div>
+      <div className="builder-layout">
+        <div className="builder-input">
+          <div className="builder-source-switch" role="group" aria-label="构建素材">
+            {([['cation', '阳离子'], ['anion', '阴离子'], ['element', '元素']] as const).map(([value, label]) => (
+              <button key={value} type="button" aria-pressed={source === value} onClick={() => setSource(value)}>{label}</button>
             ))}
           </div>
-        )}
-        {resolution ? (
-          <p className="builder-facts">
-            组成 {Object.entries(resolution.composition).map(([element, count]) => `${element}${count > 1 ? count : ''}`).join(' ')}
-            <span>总电荷 {resolution.totalCharge > 0 ? '+' : ''}{resolution.totalCharge}</span>
-          </p>
-        ) : null}
-      </div>
-      <div className="builder-matches" aria-live="polite">
-        <strong>已知物质匹配</strong>
-        {!resolution ? <p>等待组成托盘。</p> : loading ? <p>正在匹配目录…</p> : !matches.length ? (
-          <p>没有匹配的已知目录物质；不会创建新的物质 identity。</p>
-        ) : (
-          <>
-            <p>{matches.length === 1 ? '已找到 1 个已知物质。' : `已找到 ${matches.length} 个有效候选，请选择。`}</p>
-            <div className="builder-match-list">
-              {matches.map((species) => (
-                <SpeciesBlock
-                  key={species.applicationId}
-                  species={species}
-                  onAddToSide={onAddToSide}
-                  onDragStart={onDragStart}
-                  onDragEnd={onDragEnd}
-                />
-              ))}
+          <BuilderBlockGroup title={sourceLabel} blocks={sourceBlocks} onAddBlock={onAddBlock} />
+          {source === 'element' && (elements.length > visibleElements.length || showAllElements) ? (
+            <button className="show-elements" type="button" onClick={onShowAllElements}>
+              {showAllElements ? '常用元素' : `全部元素 ${elements.length}`}
+            </button>
+          ) : null}
+          <div className="builder-composition" aria-label="当前组合">
+            <div className="builder-composition-heading">
+              <strong>当前组合</strong>
+              <button type="button" onClick={onClear} disabled={!tray.length}>清空</button>
             </div>
-          </>
-        )}
+            {!tray.length ? <p>选择素材开始组合。</p> : (
+              <div className="tray-entries">
+                {tray.map((entry) => (
+                  <div className="tray-entry" key={entry.block.id}>
+                    <ChemistryNotation formula={entry.block.formula} charge={entry.block.charge} />
+                    <div className="tray-count">
+                      <button type="button" onClick={() => onAdjustBlock(entry.block.id, -1)} aria-label={`减少${entry.block.label}`}>−</button>
+                      <strong>{entry.count > 1 ? entry.count : ''}</strong>
+                      <button type="button" onClick={() => onAdjustBlock(entry.block.id, 1)} aria-label={`增加${entry.block.label}`}>+</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {resolution ? <p className="builder-facts">{Object.entries(resolution.composition).map(([element, count]) => `${element}${count > 1 ? count : ''}`).join(' ')}<span>总电荷 {resolution.totalCharge > 0 ? '+' : ''}{resolution.totalCharge}</span></p> : null}
+          </div>
+        </div>
+        <div className="builder-matches" aria-live="polite">
+          <strong>匹配结果</strong>
+          {!resolution ? <p>添加素材后显示结果。</p> : loading ? <p>匹配中…</p> : !matches.length ? (
+            <p>未找到匹配物质</p>
+          ) : (
+            <>
+              <p>{matches.length === 1 ? '1 个匹配' : `${matches.length} 个匹配`}</p>
+              <div className="builder-match-list">
+                {matches.map((species) => (
+                  <SpeciesBlock
+                    key={species.applicationId}
+                    species={species}
+                    showChineseNames={showChineseNames}
+                    onAddToSide={onAddToSide}
+                    onDragStart={onDragStart}
+                    onDragEnd={onDragEnd}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </section>
   )
