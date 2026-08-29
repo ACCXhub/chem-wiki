@@ -66,7 +66,7 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
 - 69 accepted Structure links；
 - 69 accepted Structure records；
 - 309 teaching projections；
-- 127 reviewed knowledge records；
+- 637 non-species knowledge records（其中 127 条 reviewed Concept/Phenomenon 已进入应用 catalog）；
 - reviewed rules / curriculum projections。
 
 数据整合仓库：`ACCXhub/chem-knowledge-data`。
