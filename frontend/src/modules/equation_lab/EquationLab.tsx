@@ -213,6 +213,9 @@ export function EquationLabView({
   const [result, setResult] = useState<BalanceEquationResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [balancedDraftSignature, setBalancedDraftSignature] = useState<string | null>(null)
+  const [settled, setSettled] = useState(false)
+  const [editIntentSignature, setEditIntentSignature] = useState<string | null>(null)
   const [autoBalance, setAutoBalance] = useState(true)
   const [draggedItem, setDraggedItem] = useState<DraggedItem | null>(null)
   const [dragTarget, setDragTarget] = useState<DragTarget | null>(null)
@@ -518,19 +521,30 @@ export function EquationLabView({
   const invalidateBalance = useCallback(() => {
     balanceRequestId.current += 1
     setResult(null)
+    setBalancedDraftSignature(null)
+    setEditIntentSignature(null)
+    setSettled(false)
     setError(null)
     setLoading(false)
   }, [])
 
-  const runBalance = useCallback(async (equation: string, mode: EquationMode) => {
+  const runBalance = useCallback(async (
+    equation: string,
+    mode: EquationMode,
+    draftSignature: string | null,
+  ) => {
     const requestId = balanceRequestId.current + 1
     balanceRequestId.current = requestId
+    setSettled(false)
     setLoading(true)
     setError(null)
     setResult(null)
     try {
       const response = await onBalance(equation, mode)
-      if (requestId === balanceRequestId.current) setResult(response)
+      if (requestId === balanceRequestId.current) {
+        setResult(response)
+        setBalancedDraftSignature(draftSignature)
+      }
     } catch (reason) {
       if (requestId === balanceRequestId.current) {
         setError(reason instanceof Error ? reason.message : '方程式处理失败')
@@ -543,13 +557,13 @@ export function EquationLabView({
   const handleComposerSubmit = (event: FormEvent) => {
     event.preventDefault()
     if (!canSubmitDraft(draft)) return
-    void runBalance(serializeEquationDraft(draft), draft.mode)
+    void runBalance(serializeEquationDraft(draft), draft.mode, draftSignature)
   }
 
   const handleDirectSubmit = (event: FormEvent) => {
     event.preventDefault()
     if (!directEquation.trim()) return
-    void runBalance(directEquation.trim(), draft.mode)
+    void runBalance(directEquation.trim(), draft.mode, null)
   }
 
   const chooseExample = (example: (typeof EXAMPLES)[number]) => {
@@ -707,14 +721,42 @@ export function EquationLabView({
     await navigator.clipboard.writeText(text)
   }
 
+  const draftSignature = `${draft.mode}:${serializeEquationDraft(draft)}`
+  const canSettle = result?.state === 'balanced'
+    && balancedDraftSignature === draftSignature
+    && !loading
+    && !error
+    && !draggedItem
+
+  useEffect(() => {
+    if (!canSettle || settled || editIntentSignature === draftSignature) return
+    const timer = window.setTimeout(() => setSettled(true), 240)
+    return () => window.clearTimeout(timer)
+  }, [canSettle, draftSignature, editIntentSignature, settled])
+
+  const enterEdit = () => {
+    setSettled(false)
+    setEditIntentSignature(draftSignature)
+  }
+
+  const startSpeciesDrag = (species: CatalogSpecies) => {
+    enterEdit()
+    setDraggedItem({ kind: 'species', species })
+  }
+
+  const startParticipantDrag = (side: DraftSide, applicationId: string) => {
+    enterEdit()
+    setDraggedItem({ kind: 'participant', side, applicationId })
+  }
+
   useEffect(() => {
     if (!autoBalance || !canSubmitDraft(draft)) return
     const equation = serializeEquationDraft(draft)
     const timer = window.setTimeout(() => {
-      void runBalance(equation, draft.mode)
+      void runBalance(equation, draft.mode, draftSignature)
     }, 280)
     return () => window.clearTimeout(timer)
-  }, [autoBalance, draft, runBalance])
+  }, [autoBalance, draft, draftSignature, runBalance])
 
   return (
     <main className="equation-lab-page">
@@ -740,6 +782,7 @@ export function EquationLabView({
         result={result}
         error={error}
         loading={loading}
+        settled={settled}
         autoBalance={autoBalance}
         dragTarget={dragTarget}
         duplicatePulse={duplicatePulse}
@@ -754,6 +797,7 @@ export function EquationLabView({
         onRedo={redo}
         onCopy={copyEquation}
         onManualInputToggle={() => setManualInputOpen((open) => !open)}
+        onEnterEdit={enterEdit}
         onNavigateToElement={(symbol) => { void navigateToElement(symbol) }}
         onNavigateToStructure={(applicationId) => onNavigate?.(`/structure-lab?species=${encodeURIComponent(applicationId)}`)}
         onRemove={(side, id) => changeSide(side, (items) => items.filter((item) => item.applicationId !== id))}
@@ -761,7 +805,7 @@ export function EquationLabView({
         onWorkbenchDragOver={handleWorkbenchDragOver}
         onWorkbenchDragLeave={handleWorkbenchDragLeave}
         onParticipantDragOver={handleParticipantDragOver}
-        onParticipantDragStart={(side, applicationId) => setDraggedItem({ kind: 'participant', side, applicationId })}
+        onParticipantDragStart={startParticipantDrag}
         onDrop={handleDrop}
         onDragEnd={clearDrag}
       />
@@ -851,7 +895,7 @@ export function EquationLabView({
                     showChineseNames={preferences.showChineseNames}
                     onFavorite={toggleFavorite}
                     onAddToSide={addToSide}
-                    onDragStart={(item) => setDraggedItem({ kind: 'species', species: item })}
+                    onDragStart={startSpeciesDrag}
                     onDragEnd={clearDrag}
                   />
                 ))}
@@ -874,7 +918,7 @@ export function EquationLabView({
                   showChineseNames={preferences.showChineseNames}
                   onFavorite={toggleFavorite}
                   onAddToSide={addToSide}
-                  onDragStart={(item) => setDraggedItem({ kind: 'species', species: item })}
+                  onDragStart={startSpeciesDrag}
                   onDragEnd={clearDrag}
                 />
               )
@@ -895,7 +939,7 @@ export function EquationLabView({
             onAdjustBlock={(id, delta) => setBuilderTray((current) => adjustBuilderBlock(current, id, delta))}
             onClear={() => setBuilderTray(clearBuilderTray())}
             onAddToSide={addToSide}
-            onDragStart={(species) => setDraggedItem({ kind: 'species', species })}
+            onDragStart={startSpeciesDrag}
             onDragEnd={clearDrag}
             showChineseNames={preferences.showChineseNames}
           />}

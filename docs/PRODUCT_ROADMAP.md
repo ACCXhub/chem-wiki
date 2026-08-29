@@ -181,14 +181,13 @@ Implemented product work:
 
 M05 EquationDraft remains the interaction/history anchor. Canonical Reaction completion and learning detail remain read projections rather than a second draft owner.
 
-## Phase 2B — Reaction interaction refinement（计划）
+## Phase 2B — Reaction interaction refinement（已实现）
 
-Planned product work:
+- Equation Lab 的空闲方程保持干净；左右侧仅在拖放接近时显示隐式磁吸落区，并保留键盘和窄屏放置控件。
+- 有效配平结果在短暂静置后收敛为一行 KaTeX + mhchem 标准方程；它复用当前 EquationDraft/M07 投影中的系数、物态和可逆箭头，点击即可回到 Edit。
+- Edit 与 Settled 共享同一方程数据，使用克制的 240ms 位置、缩放和透明度过渡，并尊重 reduced motion。
 
-- implicit magnetic drop zones;
-- Edit ↔ Settled equation states.
-
-Before extending calculation responsibilities beyond the stable M05 core, evaluate ChemPy against the exact gap. Reuse it only where it removes meaningful custom chemistry computation and can live behind a narrow backend adapter.
+稳定 M05 配平范围未扩展，因此本阶段无需引入 ChemPy。
 
 ## Phase 3 — Structure experience
 

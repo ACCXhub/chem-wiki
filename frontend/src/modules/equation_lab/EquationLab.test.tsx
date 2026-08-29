@@ -146,10 +146,28 @@ test('drags H2 and O2 into reactants and H2O into products, then auto-balances',
   expect(composer.getByLabelText('2 H2')).toBeInTheDocument()
   expect(composer.getByLabelText('O2')).toBeInTheDocument()
   expect(composer.getByLabelText('2 H2O')).toBeInTheDocument()
-  expect(screen.getByLabelText('反应物空槽位')).toBeInTheDocument()
-  expect(screen.getByLabelText('生成物空槽位')).toBeInTheDocument()
+  expect(screen.queryByLabelText('反应物空槽位')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('生成物空槽位')).not.toBeInTheDocument()
   expect(screen.getByText('输入未配平，已求得最简整数比')).toBeInTheDocument()
   expect(screen.getAllByRole('cell', { name: '4' })).toHaveLength(2)
+})
+
+test('settles a valid equation into one editable mhchem line and returns to editing on intent', async () => {
+  render(<EquationLabView onBack={() => undefined} onBalance={() => Promise.resolve(result)} onSearch={() => Promise.resolve(molecularCatalog)} />)
+
+  await screen.findByText('氢气')
+  addMaterial('氢气', 'reactants')
+  addMaterial('氧气', 'reactants')
+  addMaterial('水', 'products')
+
+  const settledEquation = await screen.findByRole('button', { name: /编辑方程式：2 H2 \+ O2 -> 2 H2O/ })
+  expect(settledEquation).toHaveClass('settled-equation')
+  expect(screen.getByLabelText('结构化方程式草稿')).toHaveAttribute('aria-hidden', 'true')
+  expect(screen.queryByLabelText('反应物空槽位')).not.toBeInTheDocument()
+
+  fireEvent.click(settledEquation)
+  expect(screen.getByLabelText('结构化方程式草稿')).toHaveAttribute('aria-hidden', 'false')
+  expect(screen.queryByRole('button', { name: /编辑方程式：/ })).not.toBeInTheDocument()
 })
 
 test('converges same-side duplicates and supports participant move, removal, and undo', async () => {

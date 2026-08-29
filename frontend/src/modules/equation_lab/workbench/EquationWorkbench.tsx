@@ -30,6 +30,7 @@ interface EquationWorkbenchProps {
   result: BalanceEquationResponse | null
   error: string | null
   loading: boolean
+  settled: boolean
   autoBalance: boolean
   dragTarget: DragTarget | null
   duplicatePulse: string | null
@@ -44,6 +45,7 @@ interface EquationWorkbenchProps {
   onRedo: () => void
   onCopy: () => Promise<void>
   onManualInputToggle: () => void
+  onEnterEdit: () => void
   onNavigateToElement: (symbol: string) => void
   onNavigateToStructure: (applicationId: string) => void
   onRemove: (side: DraftSide, applicationId: string) => void
@@ -77,6 +79,7 @@ export default function EquationWorkbench({
   result,
   error,
   loading,
+  settled,
   autoBalance,
   dragTarget,
   duplicatePulse,
@@ -91,6 +94,7 @@ export default function EquationWorkbench({
   onRedo,
   onCopy,
   onManualInputToggle,
+  onEnterEdit,
   onNavigateToElement,
   onNavigateToStructure,
   onRemove,
@@ -107,6 +111,9 @@ export default function EquationWorkbench({
   const reactants = displayParticipants('reactants', draft, focusedReaction, result)
   const products = displayParticipants('products', draft, focusedReaction, result)
   const arrow = focusedReaction?.reversible ? '⇌' : '→'
+  const settledExpression = result
+    ? settledEquationExpression(reactants, products, focusedReaction?.reversible ?? false)
+    : ''
   const stateLabel = loading ? '正在配平…' : error ? '配平失败' : result ? '已配平' : '配平工具'
 
   const copy = () => {
@@ -135,16 +142,23 @@ export default function EquationWorkbench({
         </div>
       </div>
 
-      <div
-        className={`equation-composer ${dragTarget ? 'is-dragging' : ''} ${focusedReaction ? 'is-focused' : ''}`}
-        aria-label="结构化方程式草稿"
-        onDragOver={onWorkbenchDragOver}
-        onDragLeave={onWorkbenchDragLeave}
-        onDrop={(event) => onDrop(event)}
-      >
-        <DraftSideLine side="reactants" participants={reactants} dragTarget={dragTarget} duplicatePulse={duplicatePulse} onRemove={onRemove} onPhase={onPhase} onParticipantDragOver={onParticipantDragOver} onParticipantDragStart={onParticipantDragStart} onDrop={onDrop} onDragEnd={onDragEnd} />
-        <div className="composer-arrow" aria-label={focusedReaction?.reversible ? '可逆反应' : '生成'}>{arrow}</div>
-        <DraftSideLine side="products" participants={products} dragTarget={dragTarget} duplicatePulse={duplicatePulse} onRemove={onRemove} onPhase={onPhase} onParticipantDragOver={onParticipantDragOver} onParticipantDragStart={onParticipantDragStart} onDrop={onDrop} onDragEnd={onDragEnd} />
+      <div className={`equation-stage ${settled ? 'is-settled' : ''}`}>
+        <div
+          className={`equation-composer ${dragTarget ? 'is-dragging' : ''} ${focusedReaction ? 'is-focused' : ''}`}
+          aria-label="结构化方程式草稿"
+          aria-hidden={settled}
+          onDragOver={onWorkbenchDragOver}
+          onDragLeave={onWorkbenchDragLeave}
+          onDrop={(event) => onDrop(event)}
+        >
+          <DraftSideLine side="reactants" participants={reactants} dragTarget={dragTarget} duplicatePulse={duplicatePulse} onRemove={onRemove} onPhase={onPhase} onParticipantDragOver={onParticipantDragOver} onParticipantDragStart={onParticipantDragStart} onDrop={onDrop} onDragEnd={onDragEnd} />
+          <div className="composer-arrow" aria-label={focusedReaction?.reversible ? '可逆反应' : '生成'}>{arrow}</div>
+          <DraftSideLine side="products" participants={products} dragTarget={dragTarget} duplicatePulse={duplicatePulse} onRemove={onRemove} onPhase={onPhase} onParticipantDragOver={onParticipantDragOver} onParticipantDragStart={onParticipantDragStart} onDrop={onDrop} onDragEnd={onDragEnd} />
+        </div>
+        <button className="settled-equation" type="button" aria-hidden={!settled} tabIndex={settled ? 0 : -1} aria-label={`编辑方程式：${settledExpression}`} onClick={onEnterEdit}>
+          <ChemistryEquation expression={settledExpression} />
+          <span>点击继续编辑</span>
+        </button>
       </div>
 
       {focusedReaction ? (
@@ -257,11 +271,25 @@ function DraftSideLine({ side, participants, dragTarget, duplicatePulse, onRemov
             <ParticipantBlock participant={participant} side={side} index={index} isDropTarget={dragTarget?.side === side && dragTarget.index === index} isPulsing={duplicatePulse === `${side}:${participant.applicationId}`} onRemove={onRemove} onPhase={onPhase} onDragOver={onParticipantDragOver} onDragStart={onParticipantDragStart} onDrop={onDrop} onDragEnd={onDragEnd} />
           </span>
         ))}
-        {participants.length ? <span className="equation-plus trailing-plus" aria-hidden="true">+</span> : null}
-        <div className={`equation-empty-slot ${dragTarget?.side === side && dragTarget.index === undefined ? 'is-active' : ''}`} aria-label={`${title}空槽位`} onDragOver={(event) => { event.stopPropagation(); onParticipantDragOver(event, { side }) }} onDrop={(event) => { event.stopPropagation(); onDrop(event, { side }) }}><span aria-hidden="true">＋</span></div>
+        {dragTarget?.side === side ? <span className="magnetic-drop-indicator" aria-hidden="true">放入{title}</span> : null}
       </div>
     </section>
   )
+}
+
+function settledEquationExpression(
+  reactants: DisplayParticipant[],
+  products: DisplayParticipant[],
+  reversible: boolean,
+): string {
+  const formatTerm = (term: DisplayParticipant) => {
+    const coefficient = term.coefficient === 1 ? '' : `${term.coefficient} `
+    const chargeText = term.charge
+      ? `^{${Math.abs(term.charge) === 1 ? '' : Math.abs(term.charge)}${term.charge > 0 ? '+' : '-'}}`
+      : ''
+    return `${coefficient}${term.formula}${chargeText}${term.phase ? `(${term.phase})` : ''}`
+  }
+  return `${reactants.map(formatTerm).join(' + ')} ${reversible ? '<=>' : '->'} ${products.map(formatTerm).join(' + ')}`
 }
 
 interface ParticipantBlockProps {

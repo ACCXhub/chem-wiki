@@ -93,6 +93,9 @@
   border-radius: .8rem;
   background: linear-gradient(90deg, rgba(13, 34, 28, .82), rgba(45, 37, 22, .36), rgba(13, 34, 28, .82));
 }
+.equation-stage { display: grid; }
+.equation-stage > * { grid-area: 1 / 1; }
+.equation-stage.is-settled .equation-composer { opacity: 0; pointer-events: none; transform: scale(.985); }
 .draft-side {
   min-width: 0;
   min-height: 3.7rem;
@@ -106,10 +109,8 @@
 .draft-participants { display: flex; flex-wrap: wrap; gap: .34rem; align-items: center; min-height: 2.9rem; }
 .equation-term { display: inline-flex; gap: .34rem; align-items: center; min-width: 0; }
 .equation-plus { color: #b59152; font-family: Georgia, serif; font-size: 1.05rem; }
-.trailing-plus { opacity: .5; }
-.equation-empty-slot { display: grid; place-items: center; width: 2.1rem; min-width: 2.1rem; height: 2.1rem; border: 1px dashed #48645a; border-radius: .52rem; color: #648078; background: rgba(7, 23, 19, .5); transition: width 140ms ease, border-color 140ms ease, color 140ms ease, background 140ms ease; }
-.equation-empty-slot.is-active,
-.draft-side.is-drag-target .equation-empty-slot { width: 2.55rem; border-color: #d0a057; color: #e7bd70; background: rgba(72, 56, 27, .5); }
+.magnetic-drop-indicator { display: inline-flex; align-items: center; min-height: 2rem; padding: .28rem .45rem; border: 1px solid #d0a057; border-radius: .48rem; color: #e7bd70; background: rgba(72, 56, 27, .5); font-size: .62rem; opacity: 0; transform: translateX(-.25rem); animation: magnetic-target-in 180ms ease forwards; }
+@keyframes magnetic-target-in { to { opacity: 1; transform: translateX(0); } }
 .draft-participant {
   min-width: 0;
   max-width: 100%;
@@ -132,6 +133,12 @@
 .phase-selector button[aria-pressed="true"], .phase-selector button:hover { border-color: #b78e49; color: #f2cf87; background: #302817; }
 @keyframes participant-pulse { 50% { transform: scale(1.06); border-color: #d0a057; } }
 .composer-arrow { display: grid; place-items: center; color: #e5bd6c; font-family: Georgia, serif; font-size: 1.8rem; }
+.settled-equation { z-index: 1; display: grid; place-items: center; align-self: stretch; gap: .4rem; min-width: 0; padding: clamp(.85rem, 2.5vw, 1.5rem); border: 1px solid transparent; border-radius: .8rem; color: #f5d692; background: transparent; cursor: pointer; opacity: 0; pointer-events: none; transform: scale(1.015); transition: opacity 240ms ease, transform 240ms ease, border-color 160ms ease, background 160ms ease; }
+.settled-equation > .chem-equation { max-width: 100%; overflow-x: auto; overflow-y: hidden; font-family: Georgia, "Noto Serif SC", serif; font-size: clamp(1.45rem, 3.2vw, 2.7rem); line-height: 1.5; }
+.settled-equation > span { color: #829a91; font-size: .62rem; opacity: 0; transition: opacity 160ms ease; }
+.equation-stage.is-settled .settled-equation { opacity: 1; pointer-events: auto; transform: scale(1); }
+.settled-equation:hover, .settled-equation:focus-visible { border-color: rgba(208, 160, 87, .55); background: rgba(45, 37, 22, .22); outline: none; }
+.settled-equation:hover > span, .settled-equation:focus-visible > span { opacity: 1; }
 .lab-submit {
   flex: 0 0 auto;
   padding: .68rem 1.1rem;
@@ -347,12 +354,13 @@
   .species-identity { grid-template-columns: minmax(3.7rem, auto) 1fr; }
   .draft-participant { max-width: 7.3rem; padding-inline: .36rem; }
   .draft-participant > span { display: none; }
-  .equation-empty-slot { width: 1.65rem; min-width: 1.65rem; }
   .manual-equation-input { align-items: stretch; }
   .manual-equation-input > button { align-self: end; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .composer-arrow,
-  .draft-side { transition: none; }
+  .draft-side,
+  .settled-equation { transition: none; }
+  .magnetic-drop-indicator { animation: none; opacity: 1; transform: none; }
 }
