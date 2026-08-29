@@ -10,12 +10,13 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
 
 - React + TypeScript 前端、FastAPI + PostgreSQL 后端；
 - Chemistry Core 领域身份与模块边界；
-- 118 元素周期表、元素属性数据与 Element Wiki；
+- 118 元素周期表、真实发布属性与 catalog-backed Element Wiki；
+- Cytoscape.js 局部知识图，以及元素 → 物质 / 反应 / 概念 / 现象探索；
 - EquationDraft、物态、拖放、重排、左右移动、Undo/Redo、复制；
 - 分子方程式、离子方程式、净离子方程式配平；
 - consolidated `knowledge_catalog`；
 - 已知 Reaction 候选匹配、方向/可逆方向、补全与稳定排序；
-- Structure Lab；
+- catalog 物质直接进入 Structure Lab；
 - Ketcher 分子绘制；
 - RDKit 结构解析、描述符、2D/3D 数据生成与官能团识别；
 - 3Dmol.js 交互式三维分子展示；
@@ -32,7 +33,7 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
   → Element Wiki
   → 离子 / 物质
   → 相关反应 / 概念 / 现象
-  → 方程实验室
+  → 方程实验室 / 结构实验室
 ```
 
 ### 反应探索
@@ -63,8 +64,9 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
 - 309 species；
 - 183 reactions；
 - 69 accepted Structure links；
+- 69 accepted Structure records；
 - 309 teaching projections；
-- 637 non-species knowledge records；
+- 127 reviewed knowledge records；
 - reviewed rules / curriculum projections。
 
 数据整合仓库：`ACCXhub/chem-knowledge-data`。
@@ -78,12 +80,12 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
 | 分子绘制 / 编辑 | Ketcher |
 | 化学结构计算与解析 | RDKit |
 | 小分子交互式 3D | 3Dmol.js |
+| Element Wiki 局部知识图 | Cytoscape.js |
 
-下一阶段计划集成：
+后续阶段计划集成：
 
 | 能力 | 项目 |
 | --- | --- |
-| Element Wiki 局部知识图谱 | Cytoscape.js（必要时配合 fCoSE） |
 | 标准化学式 / 方程排版 | KaTeX + mhchem |
 
 新增化学计算能力前优先评估成熟生态，而不是继续自研底层算法。当前重点候选包括 ChemPy（无机/物化计算、平衡与动力学）、ChEMBL Structure Pipeline（结构标准化）、OPSIN（系统命名转结构）；Open Babel 只作为 RDKit 格式覆盖不足时的备选。CGRtools 可作为未来 reaction graph 设计参考，但当前不列为计划依赖。完整边界与选型状态见 [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md)。
@@ -125,6 +127,18 @@ $env:DATABASE_URL = $databaseUrlLine.Substring('DATABASE_URL='.Length)
 ```powershell
 Set-Location backend
 uv sync --locked --dev
+$env:PYTHONPATH = (Resolve-Path src).Path
+uv run alembic upgrade head
+uv run python -m chem_wiki.data_setup
+
+# 外部 release manifest 使用 byte-exact SHA-256；Windows clone 必须保留 LF
+git -c core.autocrlf=false clone https://github.com/ACCXhub/chem-knowledge-data.git C:\path\to\chem-knowledge-data
+git -C C:\path\to\chem-knowledge-data checkout c1bf05dd68c936cb0cedf8c6877bbac0f68025e9
+
+# 指向位于 pinned release commit 的 chem-knowledge-data checkout
+$env:KNOWLEDGE_CATALOG_SOURCE = 'C:\path\to\chem-knowledge-data'
+uv run python -m chem_wiki.modules.knowledge_catalog.cli
+
 uv run uvicorn chem_wiki.main:app --app-dir src
 ```
 

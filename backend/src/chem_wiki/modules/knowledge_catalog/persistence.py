@@ -135,6 +135,42 @@ class CatalogStructureLinkRow(KnowledgeCatalogBase):
     evidence_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
 
 
+class CatalogStructureRecordRow(KnowledgeCatalogBase):
+    __tablename__ = "catalog_structure_record"
+
+    published_structure_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    structure_scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    canonical_smiles: Mapped[str | None] = mapped_column(Text)
+    isomeric_smiles: Mapped[str | None] = mapped_column(Text)
+    molecular_formula: Mapped[str | None] = mapped_column(String(160))
+    formal_charge: Mapped[int | None] = mapped_column(Integer)
+    provenance: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+
+
+class CatalogKnowledgeRecordRow(KnowledgeCatalogBase):
+    __tablename__ = "catalog_knowledge_record"
+    __table_args__ = (
+        CheckConstraint(
+            "source_type IN ('concept', 'phenomenon')",
+            name="ck_catalog_knowledge_record_type",
+        ),
+        UniqueConstraint("application_id", name="uq_catalog_knowledge_record_application_id"),
+    )
+
+    consolidated_id: Mapped[str] = mapped_column(String(240), primary_key=True)
+    application_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
+    source_package: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    source_id: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    display_name_zh: Mapped[str] = mapped_column(String(240), nullable=False)
+    teaching_priority: Mapped[str] = mapped_column(String(16), nullable=False)
+    content_zh: Mapped[str] = mapped_column(Text, nullable=False)
+    related_reaction_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    related_species_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    provenance_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+
+
 class CatalogReactionRow(KnowledgeCatalogBase):
     __tablename__ = "catalog_reaction"
     __table_args__ = (

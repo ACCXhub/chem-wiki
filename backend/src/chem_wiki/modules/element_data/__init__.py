@@ -13,11 +13,16 @@ from .persistence import (
     ElementSourceRecordRow,
     ElementSourceRow,
 )
-from .pubchem import PubChemAdapter, PubChemRawRecord
+from .pubchem import PubChemAdapter, PubChemRawRecord, PubChemSnapshotAdapter
 from .pubchem_import import (
     PubChemImportResult,
     import_pubchem_elements,
     import_pubchem_records,
+)
+from .teaching_relations import (
+    ElementTeachingRelations,
+    TeachingRelation,
+    load_element_teaching_relations,
 )
 
 __all__ = [
@@ -29,6 +34,7 @@ __all__ = [
     "ElementRow",
     "ElementSourceRecordRow",
     "ElementSourceRow",
+    "ElementTeachingRelations",
     "IdentityBootstrapResult",
     "NistAsdAdapter",
     "NistAsdRawRecord",
@@ -36,9 +42,12 @@ __all__ = [
     "PubChemAdapter",
     "PubChemImportResult",
     "PubChemRawRecord",
+    "PubChemSnapshotAdapter",
+    "TeachingRelation",
     "bootstrap_element_identities",
     "import_nist_calibrations",
     "import_nist_records",
     "import_pubchem_elements",
     "import_pubchem_records",
+    "load_element_teaching_relations",
 ]

@@ -7,16 +7,18 @@
   Structure 边界保持不变。
 - `release.py` 固定 repository、release、commit
   `c1bf05dd68c936cb0cedf8c6877bbac0f68025e9` 和 `READY_FOR_APP_IMPORT`，从
-  `generated/manifest.json` 开始校验，并验证本阶段消费的五个 JSONL 文件存在、记录数与
-  SHA-256。
+  `generated/manifest.json` 开始校验，并验证本阶段消费的 JSONL 文件存在、记录数与
+  byte-exact SHA-256。Windows source checkout 必须使用 `git -c core.autocrlf=false clone`；
+  CRLF 改写会按 release contract 被识别为 artifact hash mismatch。
 - 本地数据通过 `--source` 或 `KNOWLEDGE_CATALOG_SOURCE` 指向外部 Git checkout/cache；
   generated artifacts 未 vendoring 到 chem-wiki。Windows cache 必须使用
   `git -c core.autocrlf=false clone`，否则严格 byte hash 会拒绝 CRLF 改写后的文件。
 
 ## Persistence and identity
 
-- migration `20260826_03_knowledge_catalog` 建立 release/artifact、species mapping、source
-  crosswalk、teaching projection、Structure link、catalog Reaction 与 participant 表。
+- migrations `20260826_03_knowledge_catalog` 与 `20260828_04_phase1_knowledge` 建立
+  release/artifact、species mapping、source crosswalk、teaching projection、Structure link、
+  catalog Reaction/participant，以及 reviewed knowledge / accepted Structure record 表。
 - 309 条 species 全部导入：58 个 ion、251 个 substance。consolidated ID 是稳定外部 key；
   `catalog_species.application_id` 是稳定 UUID，并由 `entity_kind` 明确解释为 M01 `IonId` 或
   `SubstanceId`。二次导入保持 UUID 与行数不变。
@@ -25,6 +27,8 @@
   ionic / net-ionic suitability。
 - 69 条 accepted Structure link 全部解析到 application species UUID，并保留 published
   `structure_id` 与独立 application Structure UUID mapping；未关联 species 不生成结构数据。
+- pinned release 的 `knowledge_records.jsonl` 中 127 条 reviewed Concept/Phenomenon 内容已导入；
+  Structure Registry 的 69 条 accepted records 保留 canonical/isomeric SMILES 与 provenance。
 
 ## Reaction materialization
 
@@ -47,6 +51,8 @@
   charge、category、tags、Palette rank 与三种 equation suitability。结果语义为 `0..N`。
 - `GET /v1/catalog/reactions/{consolidated_id}` 提供 catalog Reaction 的 materialization state、
   原因、原始 coefficient、non-species ref 与 application target mapping，供后续阶段追溯。
+- `GET /v1/catalog/species/{application_species_id}/structure` 返回 accepted Structure entry，
+  供 Structure Lab 从稳定 application species UUID 直接载入已知结构。
 
 ## Verification
 
@@ -61,7 +67,7 @@
 
 ## Preserved scope
 
-- 637 条 non-species knowledge records、rules 与 curriculum 仅保留 manifest 后的未来消费边界，
-  本阶段未强塞入无关表。
-- Equation Lab 视觉/交互、运行时 pin/reorder/recent-use、M07 Reaction Builder、Atom Mapping、
-  Bond Diff、Mechanism 与 Synthesis 均未实现。
+- 未进入 Element Wiki 当前 bounded neighborhood 的 non-species records、rules 与 curriculum
+  继续留在 consolidated release，不强塞进应用表或前端常量。
+- Equation Lab 的既有 M05/M07 视觉、EquationDraft 与 Reaction Builder 继续由对应模块拥有；
+  Atom Mapping、Bond Diff、Mechanism 与 Synthesis 未在本轮引入。

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from chem_wiki.config import Settings
 from chem_wiki.infrastructure.database import create_database_engine, create_session_factory
+from chem_wiki.modules.knowledge_catalog import PostgresCatalogReader
 from chem_wiki.modules.periodic_table import PostgresPeriodicTableReader
 
 from .postgres import PostgresElementWikiReader
@@ -28,7 +29,11 @@ def _session_factory() -> sessionmaker[Session]:
 
 def get_element_wiki_reader() -> Iterator[ElementWikiReader]:
     with _session_factory()() as session:
-        yield PostgresElementWikiReader(session, PostgresPeriodicTableReader(session))
+        yield PostgresElementWikiReader(
+            session,
+            PostgresPeriodicTableReader(session),
+            PostgresCatalogReader(session),
+        )
 
 
 router = APIRouter(prefix="/v1/elements", tags=["element-wiki"])

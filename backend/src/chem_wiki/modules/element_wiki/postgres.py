@@ -12,11 +12,19 @@ from chem_wiki.modules.element_data import (
     ElementPublishedValueRow,
     ElementSourceRecordRow,
     ElementSourceRow,
+    load_element_teaching_relations,
+)
+from chem_wiki.modules.knowledge_catalog import (
+    CatalogKnowledgeResult,
+    CatalogReactionResult,
+    CatalogSpeciesResult,
+    CatalogStructureEntry,
 )
 from chem_wiki.modules.periodic_table import PeriodicTableElement
 
 from .read_model import (
     CanonicalElementWikiSnapshot,
+    ElementKnowledgeSnapshot,
     ElementWikiPage,
     PublishedFieldSource,
     build_element_wiki,
@@ -27,10 +35,32 @@ class PeriodicTableReader(Protocol):
     def list_elements(self) -> list[PeriodicTableElement]: ...
 
 
+class ElementWikiCatalogReader(Protocol):
+    def get_species_by_consolidated_ids(
+        self, consolidated_ids: list[str]
+    ) -> list[CatalogSpeciesResult]: ...
+
+    def get_reactions_by_consolidated_ids(
+        self, consolidated_ids: list[str]
+    ) -> list[CatalogReactionResult]: ...
+
+    def find_knowledge_for_reactions(
+        self, reactions: list[CatalogReactionResult]
+    ) -> list[CatalogKnowledgeResult]: ...
+
+    def get_structure_entry(self, application_species_id: UUID) -> CatalogStructureEntry | None: ...
+
+
 class PostgresElementWikiReader:
-    def __init__(self, session: Session, periodic_table_reader: PeriodicTableReader) -> None:
+    def __init__(
+        self,
+        session: Session,
+        periodic_table_reader: PeriodicTableReader,
+        catalog_reader: ElementWikiCatalogReader | None = None,
+    ) -> None:
         self._session = session
         self._periodic_table_reader = periodic_table_reader
+        self._catalog_reader = catalog_reader
 
     def get_element(self, element_id: UUID) -> ElementWikiPage | None:
         element = next(
@@ -114,4 +144,45 @@ class PostgresElementWikiReader:
                 for row in published_rows
             ),
         )
-        return build_element_wiki(element, snapshot)
+        return build_element_wiki(
+            element, snapshot, self._read_related_knowledge(element.atomic_number)
+        )
+
+    def _read_related_knowledge(self, atomic_number: int) -> ElementKnowledgeSnapshot:
+        if self._catalog_reader is None:
+            return ElementKnowledgeSnapshot()
+        relations = load_element_teaching_relations().get(atomic_number)
+        if relations is None:
+            return ElementKnowledgeSnapshot()
+        candidates = self._catalog_reader.get_species_by_consolidated_ids(
+            [item.consolidated_id for item in relations.species[:32]]
+        )
+        ions = [item for item in candidates if item.entity_kind == "ion"][:4]
+        substances = [item for item in candidates if item.entity_kind == "substance"][:6]
+        species = [*ions, *substances]
+        selected_species_ids = {item.consolidated_id for item in species}
+        reaction_candidates = self._catalog_reader.get_reactions_by_consolidated_ids(
+            [item.consolidated_id for item in relations.reactions[:36]]
+        )
+        reactions = [
+            reaction
+            for reaction in reaction_candidates
+            if any(
+                participant.species_id in selected_species_ids
+                for participant in reaction.participants
+            )
+        ][:6]
+        knowledge_candidates = self._catalog_reader.find_knowledge_for_reactions(reactions)
+        concepts = [item for item in knowledge_candidates if item.source_type == "concept"][:3]
+        phenomena = [item for item in knowledge_candidates if item.source_type == "phenomenon"][:3]
+        structures = tuple(
+            entry
+            for item in species
+            if (entry := self._catalog_reader.get_structure_entry(item.application_id)) is not None
+        )
+        return ElementKnowledgeSnapshot(
+            species=tuple(species),
+            reactions=tuple(reactions),
+            knowledge=(*concepts, *phenomena),
+            structures=structures,
+        )

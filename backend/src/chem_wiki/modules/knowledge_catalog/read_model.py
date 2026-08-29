@@ -63,3 +63,24 @@ class CatalogReactionResult(CatalogDto):
     equation_status: str | None
     reversible: bool | None
     provenance_refs: list[str]
+
+
+class CatalogKnowledgeResult(CatalogDto):
+    consolidated_id: str
+    application_id: UUID
+    source_type: Literal["concept", "phenomenon"]
+    display_name_zh: str
+    teaching_priority: str
+    content_zh: str
+    related_reaction_ids: list[str]
+    related_species_ids: list[str]
+
+
+class CatalogStructureEntry(CatalogDto):
+    application_species_id: UUID
+    published_structure_id: str
+    structure_scope: str
+    canonical_smiles: str | None
+    isomeric_smiles: str | None
+    molecular_formula: str | None
+    formal_charge: int | None

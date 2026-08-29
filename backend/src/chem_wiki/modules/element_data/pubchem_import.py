@@ -26,6 +26,10 @@ from .pubchem import (
 
 PUBCHEM_SOURCE_KEY = "pubchem-periodic-table"
 PUBCHEM_POLICY_VERSION = "m02-pubchem-v1"
+_PUBCHEM_ENGLISH_NAME_VARIANTS = {
+    13: frozenset({"aluminium", "aluminum"}),
+    55: frozenset({"caesium", "cesium"}),
+}
 
 
 class CanonicalElementMissingError(LookupError):
@@ -69,10 +73,11 @@ def _load_canonical_element(
         name_zh=row["name_zh"],
         name_en=row["name_en"],
     )
-    if (
-        canonical.symbol.value != record.symbol
-        or canonical.name_en.casefold() != record.name_en.casefold()
-    ):
+    accepted_names = _PUBCHEM_ENGLISH_NAME_VARIANTS.get(
+        record.atomic_number,
+        frozenset({canonical.name_en.casefold()}),
+    )
+    if canonical.symbol.value != record.symbol or record.name_en.casefold() not in accepted_names:
         raise CanonicalElementIdentityMismatchError(
             f"PubChem identity conflicts with canonical atomic_number={record.atomic_number}"
         )
@@ -227,6 +232,24 @@ def _publish_claim(
     record: NormalizedElementRecord,
 ) -> bool:
     published = ElementDataBase.metadata.tables["element_published_value"]
+    claim_table = ElementDataBase.metadata.tables["element_claim"]
+    source_record = ElementDataBase.metadata.tables["element_source_record"]
+    source = ElementDataBase.metadata.tables["element_source"]
+    current_source_key = session.scalar(
+        select(source.c.source_key)
+        .select_from(published)
+        .join(claim_table, claim_table.c.id == published.c.claim_id)
+        .join(source_record, source_record.c.id == claim_table.c.source_record_id)
+        .join(source, source.c.id == source_record.c.source_id)
+        .where(
+            published.c.element_id == element_id,
+            published.c.field_name == claim.field_name,
+        )
+    )
+    if claim.field_name == "first_ionization_energy" and current_source_key == (
+        "nist-asd-ionization-energies"
+    ):
+        return False
     current_claim_id = session.scalar(
         select(published.c.claim_id).where(
             published.c.element_id == element_id,

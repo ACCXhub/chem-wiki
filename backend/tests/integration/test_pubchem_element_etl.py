@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from chem_wiki.config import Settings
 from chem_wiki.modules.chemistry_core import ElementId
-from chem_wiki.modules.element_data import ElementDataBase
+from chem_wiki.modules.element_data import ElementDataBase, bootstrap_element_identities
 from chem_wiki.modules.element_data.pubchem import PubChemAdapter
 
 pytestmark = pytest.mark.integration
@@ -184,6 +184,18 @@ def _adapter(retrieved_at: datetime) -> PubChemAdapter:
     )
 
 
+def _identity_adapter(atomic_number: int, symbol: str, name: str) -> PubChemAdapter:
+    cells = list(PUBCHEM_PAYLOAD["Table"]["Row"][0]["Cell"])
+    cells[0:3] = [str(atomic_number), symbol, name]
+    payload = {
+        "Table": {
+            "Columns": {"Column": PUBCHEM_COLUMNS},
+            "Row": [{"Cell": cells}],
+        }
+    }
+    return PubChemAdapter(fetch_json=lambda _url, _timeout: payload, clock=lambda: FIRST_RETRIEVAL)
+
+
 def _count(session: Session, table_name: str) -> int:
     table = ElementDataBase.metadata.tables[table_name]
     return session.scalar(select(func.count()).select_from(table)) or 0
@@ -347,3 +359,43 @@ def test_pubchem_import_refuses_to_create_canonical_identity() -> None:
 
         assert _count(session, "element") == 0
         assert session.scalar(select(func.count()).select_from(tables["element_source"])) == 0
+
+
+def test_pubchem_import_accepts_only_known_english_spelling_variants() -> None:
+    importer = _load_importer()
+    tables = ElementDataBase.metadata.tables
+
+    with _migrated_engine() as engine, Session(engine) as session:
+        bootstrap_element_identities(session)
+        aluminium_id = session.scalar(
+            select(tables["element"].c.id).where(tables["element"].c.atomic_number == 13)
+        )
+        result = importer.import_pubchem_elements(
+            session,
+            adapter=_identity_adapter(13, "Al", "Aluminum"),
+            atomic_numbers={13},
+        )
+        session.commit()
+
+        assert result.element_ids == (ElementId(aluminium_id),)
+        assert (
+            session.scalar(
+                select(tables["element"].c.name_en).where(tables["element"].c.id == aluminium_id)
+            )
+            == "aluminium"
+        )
+
+        with pytest.raises(importer.CanonicalElementIdentityMismatchError):
+            importer.import_pubchem_elements(
+                session,
+                adapter=_identity_adapter(13, "Ai", "Aluminum"),
+                atomic_numbers={13},
+            )
+        session.rollback()
+
+        with pytest.raises(importer.CanonicalElementIdentityMismatchError):
+            importer.import_pubchem_elements(
+                session,
+                adapter=_identity_adapter(14, "Si", "Silicone"),
+                atomic_numbers={14},
+            )

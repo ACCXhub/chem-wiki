@@ -49,7 +49,7 @@ export default function KetcherEditor({ value, onChange, onError }: StructureEdi
         onChangeRef.current(smiles)
       }
     } catch {
-      onErrorRef.current?.('Ketcher 暂时无法导出当前结构')
+      onErrorRef.current?.('结构编辑器暂时无法导出当前结构')
     }
   }, [])
 
@@ -65,7 +65,7 @@ export default function KetcherEditor({ value, onChange, onError }: StructureEdi
     if (!ketcher || !ready || !normalized || normalized === appliedValueRef.current) return
     appliedValueRef.current = normalized
     void ketcher.setMolecule(normalized).catch(() => {
-      onErrorRef.current?.('Ketcher 无法载入该结构文本')
+      onErrorRef.current?.('结构编辑器无法载入该结构文本')
     })
   }, [ready, value])
 
@@ -75,7 +75,7 @@ export default function KetcherEditor({ value, onChange, onError }: StructureEdi
 
   return (
     <div className="structure-ketcher" data-ready={ready}>
-      {!ready ? <p className="structure-adapter-loading">正在启动 Ketcher…</p> : null}
+      {!ready ? <p className="structure-adapter-loading">正在启动结构编辑器…</p> : null}
       <Editor
         staticResourcesUrl=""
         structServiceProvider={provider}

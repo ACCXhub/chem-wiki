@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from hashlib import sha256
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -290,3 +291,54 @@ class PubChemAdapter:
                 )
             )
         return tuple(records)
+
+
+class PubChemSnapshotAdapter:
+    """Read the versioned PubChem snapshot used by deterministic local setup."""
+
+    def __init__(
+        self,
+        *,
+        snapshot_path: Path | None = None,
+        metadata_path: Path | None = None,
+    ) -> None:
+        seed_root = Path(__file__).with_name("seeds")
+        self._snapshot_path = snapshot_path or seed_root / "pubchem-periodic-table.json"
+        self._metadata_path = metadata_path or seed_root / "pubchem-periodic-table.meta.json"
+
+    def fetch_elements(self, atomic_numbers: Collection[int]) -> tuple[PubChemRawRecord, ...]:
+        requested = frozenset(atomic_numbers)
+        if not requested or any(number < 1 or number > 118 for number in requested):
+            raise ValueError("atomic_numbers must contain values from 1 through 118")
+        try:
+            snapshot_bytes = self._snapshot_path.read_bytes()
+            metadata = json.loads(self._metadata_path.read_text(encoding="utf-8"))
+            payload = json.loads(snapshot_bytes)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise PubChemPayloadError(f"cannot read PubChem snapshot: {exc}") from exc
+        if not isinstance(metadata, Mapping) or not isinstance(payload, Mapping):
+            raise PubChemPayloadError("PubChem snapshot and metadata must be JSON objects")
+        if (
+            metadata.get("source_version") != PUBCHEM_SOURCE_VERSION
+            or metadata.get("source_url") != PUBCHEM_PERIODIC_TABLE_URL
+            or metadata.get("record_count") != 118
+            or metadata.get("content_sha256") != sha256(snapshot_bytes).hexdigest()
+        ):
+            raise PubChemPayloadError("PubChem snapshot metadata or SHA-256 is invalid")
+        try:
+            retrieved_at = datetime.fromisoformat(str(metadata["retrieved_at"]))
+        except (KeyError, ValueError) as exc:
+            raise PubChemPayloadError("PubChem snapshot retrieved_at is invalid") from exc
+        records = PubChemAdapter._parse_records(payload, retrieved_at)
+        if len(records) != 118:
+            raise PubChemPayloadError("PubChem snapshot must contain 118 elements")
+        selected = tuple(
+            record for record in records if int(record.raw_payload["AtomicNumber"]) in requested
+        )
+        if {int(record.record_key) for record in selected} != requested:
+            raise PubChemPayloadError("PubChem snapshot omitted requested atomic numbers")
+        return selected
+
+    @staticmethod
+    def normalize(record: PubChemRawRecord) -> NormalizedElementRecord:
+        return _normalize_record(record)

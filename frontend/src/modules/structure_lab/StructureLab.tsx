@@ -3,13 +3,14 @@ import {
   Component,
   lazy,
   useMemo,
+  useEffect,
   useState,
   type ComponentType,
   type FormEvent,
   type ReactNode,
 } from 'react'
 
-import { analyzeStructure } from './api'
+import { analyzeStructure, loadCatalogStructure } from './api'
 import type {
   AnalyzeStructureResponse,
   MoleculeViewer3DProps,
@@ -24,6 +25,7 @@ const LazyMoleculeViewer3D = lazy(() => import('./adapters/MoleculeViewer3D'))
 
 interface StructureLabProps {
   onBack: () => void
+  speciesId?: string | null
 }
 
 interface StructureLabViewProps extends StructureLabProps {
@@ -33,6 +35,7 @@ interface StructureLabViewProps extends StructureLabProps {
   ) => Promise<AnalyzeStructureResponse>
   EditorComponent?: ComponentType<StructureEditorProps>
   Viewer3DComponent?: ComponentType<MoleculeViewer3DProps>
+  initialSmiles?: string | null
 }
 
 interface AdapterErrorBoundaryProps {
@@ -77,14 +80,22 @@ export function StructureLabView({
   onAnalyze,
   EditorComponent = LazyKetcherEditor,
   Viewer3DComponent = LazyMoleculeViewer3D,
+  initialSmiles = null,
 }: StructureLabViewProps) {
-  const [text, setText] = useState(EXAMPLES[0].text)
-  const [label, setLabel] = useState(EXAMPLES[0].label)
+  const [text, setText] = useState(initialSmiles ?? EXAMPLES[0].text)
+  const [label, setLabel] = useState(initialSmiles ? '目录物质' : EXAMPLES[0].label)
   const [result, setResult] = useState<AnalyzeStructureResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editorError, setEditorError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(Boolean(initialSmiles))
   const [highlightedAtoms, setHighlightedAtoms] = useState<number[]>([])
+
+  useEffect(() => {
+    if (!initialSmiles) return
+    void onAnalyze('smiles', initialSmiles).then(setResult).catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : '结构分析失败')
+    }).finally(() => setLoading(false))
+  }, [initialSmiles, onAnalyze])
 
   const highlightedCoordinates = useMemo(() => {
     if (!result?.depiction) return []
@@ -126,7 +137,6 @@ export function StructureLabView({
 
       <header className="structure-hero">
         <div>
-          <p className="eyebrow">M06 · Structure Lab + Organic</p>
           <h1>结构实验室</h1>
           <p>从分子结构出发，验证化学表示、观察二维与三维构型，并定位官能团。</p>
         </div>
@@ -138,8 +148,8 @@ export function StructureLabView({
       <div className="structure-workspace">
         <section className="structure-panel structure-editor-panel" aria-labelledby="editor-heading">
           <div className="structure-panel-heading">
-            <div><p className="eyebrow">Draw / Edit</p><h2 id="editor-heading">绘制分子</h2></div>
-            <span>Ketcher · Apache-2.0</span>
+            <div><h2 id="editor-heading">绘制分子</h2></div>
+            <span>绘制或编辑结构</span>
           </div>
           <div className="structure-examples" aria-label="结构示例">
             {EXAMPLES.map((example) => (
@@ -148,8 +158,8 @@ export function StructureLabView({
               </button>
             ))}
           </div>
-          <AdapterErrorBoundary message="Ketcher 编辑器加载失败，可继续使用 SMILES 输入">
-            <Suspense fallback={<div className="structure-adapter-loading">正在载入 Ketcher 编辑器…</div>}>
+          <AdapterErrorBoundary message="结构编辑器加载失败，可继续使用 SMILES 输入">
+            <Suspense fallback={<div className="structure-adapter-loading">正在载入结构编辑器…</div>}>
               <EditorComponent value={text} onChange={(value) => { setText(value); setLabel('当前结构') }} onError={setEditorError} />
             </Suspense>
           </AdapterErrorBoundary>
@@ -168,13 +178,13 @@ export function StructureLabView({
               </button>
             </div>
           </form>
-          <p className="structure-input-note">接受 SMILES；Ketcher 绘图会同步为该库无关文本表示。</p>
+          <p className="structure-input-note">接受 SMILES；绘图内容会同步到输入框。</p>
         </section>
 
         <section className="structure-panel structure-visual-panel" aria-labelledby="visual-heading">
           <div className="structure-panel-heading">
-            <div><p className="eyebrow">Depiction</p><h2 id="visual-heading">分子视图</h2></div>
-            <span>RDKit + 3Dmol.js</span>
+            <div><h2 id="visual-heading">分子视图</h2></div>
+            <span>二维 / 三维</span>
           </div>
           {!result && !error && !loading ? (
             <div className="structure-empty"><span>⌬</span><p>分析后生成 2D 描图与可旋转 3D 构象。</p></div>
@@ -225,7 +235,7 @@ export function StructureLabView({
 
         <section className="structure-panel structure-analysis-panel" aria-labelledby="analysis-heading">
           <div className="structure-panel-heading">
-            <div><p className="eyebrow">Analysis</p><h2 id="analysis-heading">结构分析</h2></div>
+            <div><h2 id="analysis-heading">结构分析</h2></div>
           </div>
           {result?.state === 'valid' && result.descriptors && result.formula ? (
             <>
@@ -255,14 +265,13 @@ export function StructureLabView({
                     >
                       <span><strong>{group.nameZh}</strong><small>{group.nameEn}</small></span>
                       <em>{group.occurrences.length} 处</em>
-                      <code>{group.patternSource}</code>
                     </button>
                   )
                 }) : <p className="structure-no-groups">当前课程目录未匹配到官能团。</p>}
               </div>
               <aside className="structure-boundary">
-                <strong>不构造反应，也不推断机理</strong>
-                <p>Property 与 Reaction 只会在后续模块通过已审核关系接入；这里不生成猜测内容。</p>
+                <strong>结构分析范围</strong>
+                <p>这里展示分子结构、基础描述符与官能团，不从结构猜测反应或机理。</p>
               </aside>
             </>
           ) : (
@@ -274,6 +283,30 @@ export function StructureLabView({
   )
 }
 
-export default function StructureLab({ onBack }: StructureLabProps) {
-  return <StructureLabView onBack={onBack} onAnalyze={analyzeStructure} />
+export default function StructureLab({ onBack, speciesId }: StructureLabProps) {
+  const [knownSmiles, setKnownSmiles] = useState<string | null>(null)
+  const [entryError, setEntryError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!speciesId) return
+    let active = true
+    void loadCatalogStructure(speciesId).then((entry) => {
+      if (active) setKnownSmiles(entry.isomericSmiles ?? entry.canonicalSmiles)
+    }).catch((reason: unknown) => {
+      if (active) setEntryError(reason instanceof Error ? reason.message : '已知结构加载失败')
+    })
+    return () => { active = false }
+  }, [speciesId])
+
+  return (
+    <>
+      {entryError ? <div className="structure-entry-error" role="alert">{entryError}</div> : null}
+      <StructureLabView
+        key={knownSmiles ?? 'manual'}
+        onBack={onBack}
+        onAnalyze={analyzeStructure}
+        initialSmiles={knownSmiles}
+      />
+    </>
+  )
 }

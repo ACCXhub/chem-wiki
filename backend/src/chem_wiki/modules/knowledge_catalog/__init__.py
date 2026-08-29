@@ -1,7 +1,9 @@
 """Application-owned consolidated knowledge catalog boundary."""
 
+from .api import CatalogReader, get_catalog_reader
 from .importer import KnowledgeCatalogImportResult, import_consolidated_release
 from .persistence import (
+    CatalogKnowledgeRecordRow,
     CatalogReactionParticipantRow,
     CatalogReactionRow,
     CatalogReleaseArtifactRow,
@@ -9,15 +11,17 @@ from .persistence import (
     CatalogSourceCrosswalkRow,
     CatalogSpeciesRow,
     CatalogStructureLinkRow,
+    CatalogStructureRecordRow,
     CatalogTeachingProjectionRow,
     KnowledgeCatalogBase,
 )
 from .postgres import PostgresCatalogReader
-from .api import CatalogReader, get_catalog_reader
 from .read_model import (
+    CatalogKnowledgeResult,
     CatalogReactionParticipantResult,
     CatalogReactionResult,
     CatalogSpeciesResult,
+    CatalogStructureEntry,
 )
 from .release import (
     PINNED_RELEASE,
@@ -32,17 +36,21 @@ from .release import (
 
 __all__ = [
     "PINNED_RELEASE",
+    "CatalogKnowledgeRecordRow",
+    "CatalogKnowledgeResult",
     "CatalogReactionParticipantResult",
     "CatalogReactionParticipantRow",
     "CatalogReactionResult",
     "CatalogReactionRow",
+    "CatalogReader",
     "CatalogReleaseArtifactRow",
     "CatalogReleaseRow",
     "CatalogSourceCrosswalkRow",
     "CatalogSpeciesResult",
     "CatalogSpeciesRow",
-    "CatalogReader",
+    "CatalogStructureEntry",
     "CatalogStructureLinkRow",
+    "CatalogStructureRecordRow",
     "CatalogTeachingProjectionRow",
     "KnowledgeCatalogBase",
     "KnowledgeCatalogImportResult",
@@ -52,8 +60,8 @@ __all__ = [
     "ReleaseValidationError",
     "VerifiedArtifact",
     "VerifiedRelease",
-    "import_consolidated_release",
     "get_catalog_reader",
+    "import_consolidated_release",
     "read_git_source_identity",
     "verify_release",
 ]

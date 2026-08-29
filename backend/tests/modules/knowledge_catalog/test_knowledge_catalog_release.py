@@ -17,6 +17,7 @@ CONSUMED_ARTIFACTS = {
     "structure_links.jsonl": '{"source_link_id":"link:test"}\n',
     "reactions.jsonl": '{"id":"reaction:test"}\n',
     "teaching_projection.jsonl": '{"species_id":"species:test"}\n',
+    "knowledge_records.jsonl": '{"id":"knowledge:test"}\n',
 }
 ARTIFACT_RECORD_COUNTS = {
     "species.jsonl": 309,
@@ -24,6 +25,7 @@ ARTIFACT_RECORD_COUNTS = {
     "structure_links.jsonl": 69,
     "reactions.jsonl": 183,
     "teaching_projection.jsonl": 309,
+    "knowledge_records.jsonl": 637,
 }
 
 
@@ -49,6 +51,7 @@ def _write_release(root: Path, *, release: str | None = None, state: str | None 
             "structure_links": 69,
             "reactions": 183,
             "teaching_projections": 309,
+            "knowledge_records": 637,
         },
         "files": files,
     }
@@ -98,6 +101,18 @@ def test_modified_consumed_artifact_hash_is_rejected(tmp_path: Path) -> None:
     source = _write_release(tmp_path)
     artifact = source / "packages" / "consolidated" / "generated" / "species.jsonl"
     artifact.write_text(artifact.read_text(encoding="utf-8") + "tampered", encoding="utf-8")
+
+    with pytest.raises(ReleaseValidationError) as error:
+        verify_release(source, source_identity=_pinned_identity())
+
+    assert error.value.code == "artifact_hash_mismatch"
+    assert error.value.artifact == "species.jsonl"
+
+
+def test_line_ending_rewrite_is_rejected_by_byte_exact_hash(tmp_path: Path) -> None:
+    source = _write_release(tmp_path)
+    artifact = source / "packages" / "consolidated" / "generated" / "species.jsonl"
+    artifact.write_bytes(artifact.read_bytes().replace(b"\n", b"\r\n"))
 
     with pytest.raises(ReleaseValidationError) as error:
         verify_release(source, source_identity=_pinned_identity())

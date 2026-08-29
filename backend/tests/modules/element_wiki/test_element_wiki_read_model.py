@@ -105,6 +105,7 @@ def test_build_element_wiki_projects_published_properties_sources_and_typed_empt
                 "label": "氯 Cl",
                 "secondaryLabel": "原子序数 17",
                 "href": f"/elements/{element_id}",
+                "description": None,
             }
         ],
         "edges": [],
@@ -186,6 +187,28 @@ def test_reaction_edges_require_an_explicit_reaction_node_endpoint() -> None:
             target=reaction_id,
             targetType="Substance",
             label="错误的物质直连",
+        )
+
+    ion_edge = read_model.KnowledgeEdge(
+        id=UUID(int=4),
+        type="REACTANT_IN",
+        source=UUID(int=5),
+        sourceType="Ion",
+        target=reaction_id,
+        targetType="Reaction",
+        label="离子作为反应物参与",
+    )
+    assert ion_edge.source_type == "Ion"
+
+    with pytest.raises(ValidationError, match="CONTAINS_ELEMENT requires Substance -> Element"):
+        read_model.KnowledgeEdge(
+            id=UUID(int=6),
+            type="CONTAINS_ELEMENT",
+            source=UUID(int=7),
+            sourceType="Question",
+            target=UUID(int=8),
+            targetType="Element",
+            label="错误的题目直连",
         )
 
 

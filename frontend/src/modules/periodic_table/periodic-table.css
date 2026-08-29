@@ -218,20 +218,19 @@ input:focus-visible,
 }
 
 .metal-nonmetal-boundary {
-  z-index: 1;
-  width: 100%;
-  height: 100%;
+  display: contents;
   grid-column: 1 / -1;
   grid-row: 1 / -1;
-  overflow: visible;
   pointer-events: none;
 }
 
-.metal-nonmetal-boundary path {
-  fill: none;
-  stroke: rgba(241, 208, 135, 0.9);
-  stroke-linecap: square;
-  stroke-width: 0.075;
+.metal-nonmetal-boundary i {
+  z-index: 3;
+  align-self: stretch;
+  justify-self: stretch;
+  margin: -0.18rem;
+  border-bottom: 2px solid rgba(241, 208, 135, 0.9);
+  border-left: 2px solid rgba(241, 208, 135, 0.9);
 }
 
 .element-cell {

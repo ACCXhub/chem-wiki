@@ -33,6 +33,7 @@ from chem_wiki.modules.reaction_core import (
 )
 
 from .persistence import (
+    CatalogKnowledgeRecordRow,
     CatalogReactionParticipantRow,
     CatalogReactionRow,
     CatalogReleaseArtifactRow,
@@ -40,6 +41,7 @@ from .persistence import (
     CatalogSourceCrosswalkRow,
     CatalogSpeciesRow,
     CatalogStructureLinkRow,
+    CatalogStructureRecordRow,
     CatalogTeachingProjectionRow,
 )
 from .release import PINNED_RELEASE, ReleaseSourceIdentity, VerifiedRelease, verify_release
@@ -48,6 +50,7 @@ SPECIES_NAMESPACE = uuid5(NAMESPACE_URL, "chem-wiki:knowledge-catalog:species:v1
 STRUCTURE_NAMESPACE = uuid5(NAMESPACE_URL, "chem-wiki:knowledge-catalog:structure:v1")
 REACTION_NAMESPACE = uuid5(NAMESPACE_URL, "chem-wiki:knowledge-catalog:reaction:v1")
 PARTICIPANT_NAMESPACE = uuid5(NAMESPACE_URL, "chem-wiki:knowledge-catalog:participant:v1")
+KNOWLEDGE_NAMESPACE = uuid5(NAMESPACE_URL, "chem-wiki:knowledge-catalog:knowledge:v1")
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +61,8 @@ class KnowledgeCatalogImportResult:
     catalog_reactions_imported: int
     m05_reactions_materialized: int
     catalog_only_reactions: int
+    knowledge_records_imported: int
+    structure_records_imported: int
 
 
 def _load_jsonl(release: VerifiedRelease, name: str) -> list[dict[str, Any]]:
@@ -209,6 +214,85 @@ def _import_structure_links(
                 evidence_refs=list(record["evidence_refs"]),
             )
         )
+
+
+def _import_structure_records(session: Session, release: VerifiedRelease) -> int:
+    referenced = {
+        str(item["structure_id"]) for item in _load_jsonl(release, "structure_links.jsonl")
+    }
+    canonical_root = release.source_root / "packages" / "structure_registry" / "data" / "canonical"
+    records: dict[str, dict[str, Any]] = {}
+    filenames = (
+        "ions.jsonl",
+        "molecules.jsonl",
+        "formula_units.jsonl",
+        "polymer_repeat_units.jsonl",
+    )
+    for name in filenames:
+        path = canonical_root / name
+        if not path.is_file():
+            raise ValueError(f"pinned structure registry 缺少 {name}")
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            structure_id = str(record["structure_id"])
+            if structure_id in referenced:
+                records[structure_id] = record
+    missing = sorted(referenced - records.keys())
+    if missing:
+        raise ValueError(f"accepted Structure links 缺少 registry records：{missing}")
+    for structure_id, record in records.items():
+        if session.get(CatalogStructureRecordRow, structure_id) is None:
+            session.add(
+                CatalogStructureRecordRow(
+                    published_structure_id=structure_id,
+                    structure_scope=str(record["structure_scope"]),
+                    canonical_smiles=record.get("canonical_smiles"),
+                    isomeric_smiles=record.get("isomeric_smiles"),
+                    molecular_formula=record.get("molecular_formula"),
+                    formal_charge=record.get("formal_charge"),
+                    provenance=list(record.get("provenance", [])),
+                )
+            )
+    return len(records)
+
+
+def _import_knowledge_records(session: Session, records: list[dict[str, Any]]) -> int:
+    imported = 0
+    for record in records:
+        source_type = str(record["source_type"])
+        payload = dict(record["payload"])
+        if (
+            source_type not in {"concept", "phenomenon"}
+            or payload.get("review_status") != "reviewed"
+        ):
+            continue
+        consolidated_id = str(record["id"])
+        if session.get(CatalogKnowledgeRecordRow, consolidated_id) is not None:
+            imported += 1
+            continue
+        content = payload.get("definition_zh") or payload.get("observation_zh")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        session.add(
+            CatalogKnowledgeRecordRow(
+                consolidated_id=consolidated_id,
+                application_id=_stable_uuid(KNOWLEDGE_NAMESPACE, consolidated_id),
+                source_package=str(record["source_package"]),
+                source_id=str(record["source_id"]),
+                source_type=source_type,
+                display_name_zh=str(record["display_name_zh"]),
+                teaching_priority=str(record["teaching_priority"]),
+                content_zh=content,
+                related_reaction_ids=list(payload.get("related_reaction_ids", [])),
+                related_species_ids=list(payload.get("related_species_ids", [])),
+                payload=payload,
+                provenance_refs=list(record["provenance_refs"]),
+            )
+        )
+        imported += 1
+    return imported
 
 
 def _numeric_coefficient(value: object) -> Decimal | None:
@@ -381,12 +465,15 @@ def import_consolidated_release(
     structure_link_records = _load_jsonl(release, "structure_links.jsonl")
     reaction_records = _load_jsonl(release, "reactions.jsonl")
     teaching_records = _load_jsonl(release, "teaching_projection.jsonl")
+    knowledge_records = _load_jsonl(release, "knowledge_records.jsonl")
 
     _store_release(session, release)
     species = _import_species(session, species_records)
     _import_crosswalks(session, crosswalk_records)
     _import_teaching_projections(session, teaching_records)
     _import_structure_links(session, structure_link_records, species)
+    structure_record_count = _import_structure_records(session, release)
+    knowledge_record_count = _import_knowledge_records(session, knowledge_records)
     session.flush()
     materialized, catalog_only = _import_reactions(session, reaction_records, species)
     session.flush()
@@ -398,4 +485,6 @@ def import_consolidated_release(
         catalog_reactions_imported=len(reaction_records),
         m05_reactions_materialized=materialized,
         catalog_only_reactions=catalog_only,
+        knowledge_records_imported=knowledge_record_count,
+        structure_records_imported=structure_record_count,
     )

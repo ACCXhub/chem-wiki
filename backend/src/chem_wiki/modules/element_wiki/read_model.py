@@ -3,10 +3,16 @@
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from chem_wiki.modules.knowledge_catalog import (
+    CatalogKnowledgeResult,
+    CatalogReactionResult,
+    CatalogSpeciesResult,
+    CatalogStructureEntry,
+)
 from chem_wiki.modules.periodic_table import ElementCategory, PeriodicTableElement
 
 PropertyKey = Literal[
@@ -121,6 +127,7 @@ class KnowledgeNode(BaseModel):
     label: str
     secondary_label: str | None = Field(default=None, alias="secondaryLabel")
     href: str | None = None
+    description: str | None = None
 
 
 class KnowledgeEdge(BaseModel):
@@ -147,7 +154,21 @@ class KnowledgeEdge(BaseModel):
         }
         expected = exact_pairs[self.type]
         tests_reaction = self.type == "TESTS" and pair == ("Question", "Reaction")
-        if pair != expected and not tests_reaction:
+        contains_element = self.type == "CONTAINS_ELEMENT" and pair in {
+            ("Ion", "Element"),
+            ("Substance", "Element"),
+        }
+        species_reaction = self.type in {"REACTANT_IN", "PRODUCT_OF"} and pair in {
+            ("Ion", "Reaction"),
+            ("Substance", "Reaction"),
+        }
+        if self.type == "CONTAINS_ELEMENT":
+            valid = contains_element
+        elif self.type in {"REACTANT_IN", "PRODUCT_OF"}:
+            valid = species_reaction
+        else:
+            valid = pair == expected or tests_reaction
+        if not valid:
             raise ValueError(f"{self.type} requires {expected[0]} -> {expected[1]}")
         return self
 
@@ -177,6 +198,21 @@ class ElementWikiPage(BaseModel):
     sections: ElementWikiSections
     graph: ElementKnowledgeGraph
     sources: list[ElementWikiSource]
+
+
+@dataclass(frozen=True, slots=True)
+class ElementKnowledgeSnapshot:
+    species: tuple[CatalogSpeciesResult, ...] = ()
+    reactions: tuple[CatalogReactionResult, ...] = ()
+    knowledge: tuple[CatalogKnowledgeResult, ...] = ()
+    structures: tuple[CatalogStructureEntry, ...] = ()
+
+
+_GRAPH_NAMESPACE = uuid5(NAMESPACE_URL, "chem-wiki:element-wiki:graph:v1")
+
+
+def _graph_id(value: str) -> UUID:
+    return uuid5(_GRAPH_NAMESPACE, value)
 
 
 def _source_keys(field_name: str, sources: tuple[PublishedFieldSource, ...]) -> list[str]:
@@ -246,7 +282,9 @@ def _build_sources(sources: tuple[PublishedFieldSource, ...]) -> list[ElementWik
 def build_element_wiki(
     element: PeriodicTableElement,
     snapshot: CanonicalElementWikiSnapshot,
+    knowledge_snapshot: ElementKnowledgeSnapshot | None = None,
 ) -> ElementWikiPage:
+    related = knowledge_snapshot or ElementKnowledgeSnapshot()
     properties = [
         _property(
             key="atomicWeight",
@@ -291,12 +329,101 @@ def build_element_wiki(
         secondaryLabel=f"原子序数 {element.atomic_number}",
         href=f"/elements/{element.id}",
     )
+    structures = {entry.application_species_id: entry for entry in related.structures}
+    species_nodes: dict[str, KnowledgeNode] = {}
+    for species in related.species:
+        structure = structures.get(species.application_id)
+        charge = f" · 电荷 {species.charge:+d}" if species.charge else ""
+        species_nodes[species.consolidated_id] = KnowledgeNode(
+            id=species.application_id,
+            type="Ion" if species.entity_kind == "ion" else "Substance",
+            label=species.name_zh,
+            secondaryLabel=f"{species.formula}{charge}",
+            href=(
+                f"/structure-lab?species={species.application_id}"
+                if structure is not None and structure.canonical_smiles
+                else None
+            ),
+            description="可在结构实验室中继续探索"
+            if structure and structure.canonical_smiles
+            else None,
+        )
+    reaction_nodes = {
+        reaction.consolidated_id: KnowledgeNode(
+            id=reaction.application_reaction_id or _graph_id(reaction.consolidated_id),
+            type="Reaction",
+            label=reaction.name_zh,
+            secondaryLabel=reaction.equation,
+            href=f"/equation-lab?reaction={reaction.consolidated_id}",
+            description="在方程实验室中打开",
+        )
+        for reaction in related.reactions
+    }
+    knowledge_nodes = {
+        item.consolidated_id: KnowledgeNode(
+            id=item.application_id,
+            type="Concept" if item.source_type == "concept" else "Phenomenon",
+            label=item.display_name_zh,
+            secondaryLabel=item.content_zh,
+            description=item.content_zh,
+        )
+        for item in related.knowledge
+    }
+    edges: list[KnowledgeEdge] = []
+    for species_id, node in species_nodes.items():
+        edges.append(
+            KnowledgeEdge(
+                id=_graph_id(f"contains:{species_id}:{element.id}"),
+                type="CONTAINS_ELEMENT",
+                source=node.id,
+                sourceType=node.type,
+                target=element.id,
+                targetType="Element",
+                label="包含该元素",
+            )
+        )
+    for reaction in related.reactions:
+        reaction_node = reaction_nodes[reaction.consolidated_id]
+        for participant in reaction.participants:
+            if participant.species_id not in species_nodes:
+                continue
+            species_node = species_nodes[participant.species_id]
+            edge_type: EdgeType = "REACTANT_IN" if participant.role == "reactant" else "PRODUCT_OF"
+            edges.append(
+                KnowledgeEdge(
+                    id=_graph_id(
+                        f"{edge_type}:{participant.species_id}:{reaction.consolidated_id}"
+                    ),
+                    type=edge_type,
+                    source=species_node.id,
+                    sourceType=species_node.type,
+                    target=reaction_node.id,
+                    targetType="Reaction",
+                    label="作为反应物" if edge_type == "REACTANT_IN" else "作为生成物",
+                )
+            )
+        for item in related.knowledge:
+            if reaction.source_id not in item.related_reaction_ids:
+                continue
+            knowledge_node = knowledge_nodes[item.consolidated_id]
+            edge_type = "RELATES_TO" if item.source_type == "concept" else "HAS_PHENOMENON"
+            edges.append(
+                KnowledgeEdge(
+                    id=_graph_id(f"{edge_type}:{reaction.consolidated_id}:{item.consolidated_id}"),
+                    type=edge_type,
+                    source=reaction_node.id,
+                    sourceType="Reaction",
+                    target=knowledge_node.id,
+                    targetType=knowledge_node.type,
+                    label="相关概念" if edge_type == "RELATES_TO" else "实验现象",
+                )
+            )
     sections = ElementWikiSections(
-        ions=[],
-        substances=[],
-        reactions=[],
-        phenomena=[],
-        concepts=[],
+        ions=[node for node in species_nodes.values() if node.type == "Ion"],
+        substances=[node for node in species_nodes.values() if node.type == "Substance"],
+        reactions=list(reaction_nodes.values()),
+        phenomena=[node for node in knowledge_nodes.values() if node.type == "Phenomenon"],
+        concepts=[node for node in knowledge_nodes.values() if node.type == "Concept"],
         questions=[],
     )
     return ElementWikiPage(
@@ -318,9 +445,14 @@ def build_element_wiki(
         sections=sections,
         graph=ElementKnowledgeGraph(
             centerNodeId=element.id,
-            nodes=[center],
-            edges=[],
-            emptyReason="暂无已审核的相关物质、反应或概念数据",
+            nodes=[
+                center,
+                *species_nodes.values(),
+                *reaction_nodes.values(),
+                *knowledge_nodes.values(),
+            ],
+            edges=edges,
+            emptyReason=None if edges else "暂无已审核的相关物质、反应或概念数据",
         ),
         sources=_build_sources(snapshot.published_sources),
     )

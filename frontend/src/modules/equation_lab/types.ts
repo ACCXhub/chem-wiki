@@ -64,6 +64,21 @@ export interface ReactionCandidate {
   missingParticipantCount: number
 }
 
+export interface CatalogReactionEntry {
+  consolidatedId: string
+  applicationReactionId: string | null
+  nameZh: string
+  materializationState: 'materialized' | 'catalog_only'
+  participants: ReactionCandidateParticipant[]
+  equation: string | null
+  reversible: boolean | null
+  reactionTypes: string[]
+  conditions: string[]
+  provenanceRefs: string[]
+  sourcePackage: string
+  sourceId: string
+}
+
 export interface ReactionCandidateQuery {
   reactantApplicationIds: string[]
   productApplicationIds: string[]

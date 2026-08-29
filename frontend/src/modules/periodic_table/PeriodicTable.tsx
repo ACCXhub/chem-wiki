@@ -43,6 +43,12 @@ const MODES: readonly { id: DisplayMode; label: string }[] = [
 
 const GROUPS = Array.from({ length: 18 }, (_, index) => index + 1)
 const PERIODS = Array.from({ length: 7 }, (_, index) => index + 1)
+const STAIRCASE_STEPS = [
+  { column: 15, row: 3 },
+  { column: 16, row: 4 },
+  { column: 17, row: 5 },
+  { column: 18, row: 6 },
+] as const
 const INSPECTOR_WIDTH = 288
 const INSPECTOR_HEIGHT = 410
 const INSPECTOR_GUTTER = 12
@@ -138,10 +144,9 @@ export function PeriodicTableView({
     <div className="periodic-table-page">
       <header className="periodic-hero">
         <div>
-          <p className="eyebrow">M03 · Explore</p>
           <h1>高中化学交互式 Wiki</h1>
           <p className="hero-copy">
-            从元素位置出发，观察性质的周期性。当前展示 PostgreSQL 中的 canonical 数据。
+            从元素位置出发，比较元素性质，并进入物质、反应与结构探索。
           </p>
         </div>
         <div className="hero-stat" aria-label={`${elements.length} 个元素`}>
@@ -210,15 +215,18 @@ export function PeriodicTableView({
                   {period}
                 </span>
               ))}
-              <svg
+              <div
                 className="metal-nonmetal-boundary"
                 data-testid="metal-nonmetal-boundary"
-                viewBox="0 0 19 10"
-                preserveAspectRatio="none"
                 aria-hidden="true"
               >
-                <path d="M14 2 L14 3 L15 3 L15 4 L16 4 L16 5 L17 5 L17 6" />
-              </svg>
+                {STAIRCASE_STEPS.map((step) => (
+                  <i
+                    key={`${step.column}:${step.row}`}
+                    style={{ gridColumn: step.column, gridRow: step.row }}
+                  />
+                ))}
+              </div>
               {elements.map((element) => {
                 const property = propertyFor(element, mode)
                 const value = property?.value ?? null
@@ -348,7 +356,7 @@ export function PeriodicTableView({
               </article>
             </div>
             <p className="wiki-extension">
-              点击或按 Enter 可通过稳定元素 ID 打开 Element Wiki。
+              点击或按 Enter 查看相关物质、反应、概念与实验现象。
             </p>
           </aside>
         ) : null}
@@ -389,7 +397,7 @@ export default function PeriodicTable({ onElementSelect }: PeriodicTableProps) {
     return (
       <main className="periodic-state">
         <h1>高中化学交互式 Wiki</h1>
-        <p>正在读取 canonical 元素数据…</p>
+        <p>正在读取元素数据…</p>
       </main>
     )
   }

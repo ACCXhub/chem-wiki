@@ -57,9 +57,7 @@ def test_catalog_species_read_dto_exposes_composition_and_classifications() -> N
 
 
 def test_catalog_reaction_participant_exposes_canonical_species_display_fields() -> None:
-    assert {"name_zh", "formula", "charge"} <= set(
-        CatalogReactionParticipantResult.model_fields
-    )
+    assert {"name_zh", "formula", "charge"} <= set(CatalogReactionParticipantResult.model_fields)
 
 
 def test_catalog_reader_resolves_known_species_by_composition_charge_and_kind() -> None:

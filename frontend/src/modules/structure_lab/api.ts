@@ -4,6 +4,15 @@ import type { AnalyzeStructureResponse, StructureInputFormat } from './types'
 interface ErrorPayload {
   detail?: { message?: string } | string
 }
+export interface CatalogStructureEntry {
+  applicationSpeciesId: string
+  publishedStructureId: string
+  structureScope: string
+  canonicalSmiles: string | null
+  isomericSmiles: string | null
+  molecularFormula: string | null
+  formalCharge: number | null
+}
 export async function analyzeStructure(
   format: StructureInputFormat,
   text: string,
@@ -22,4 +31,15 @@ export async function analyzeStructure(
     throw new Error(message)
   }
   return (await response.json()) as AnalyzeStructureResponse
+}
+
+export async function loadCatalogStructure(
+  applicationSpeciesId: string,
+): Promise<CatalogStructureEntry> {
+  const response = await fetch(
+    `/v1/catalog/species/${encodeURIComponent(applicationSpeciesId)}/structure`,
+    { headers: { Accept: 'application/json' } },
+  )
+  if (!response.ok) throw new Error(`已知结构加载失败（HTTP ${response.status}）`)
+  return (await response.json()) as CatalogStructureEntry
 }

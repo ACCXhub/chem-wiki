@@ -13,16 +13,21 @@ from sqlalchemy.orm import Session
 
 from chem_wiki.config import Settings
 from chem_wiki.main import create_app
+from chem_wiki.modules.element_data import ElementDataBase, bootstrap_element_identities
+from chem_wiki.modules.element_wiki import PostgresElementWikiReader
 from chem_wiki.modules.knowledge_catalog import (
+    CatalogKnowledgeRecordRow,
     CatalogReactionParticipantRow,
     CatalogReactionRow,
     CatalogSourceCrosswalkRow,
     CatalogSpeciesRow,
     CatalogStructureLinkRow,
+    CatalogStructureRecordRow,
     CatalogTeachingProjectionRow,
     PostgresCatalogReader,
     import_consolidated_release,
 )
+from chem_wiki.modules.periodic_table import PostgresPeriodicTableReader
 from chem_wiki.modules.reaction_core import ReactionParticipantRow, ReactionRow
 
 pytestmark = pytest.mark.integration
@@ -61,6 +66,7 @@ def test_release_import_is_complete_idempotent_and_queryable(
     consolidated_source: Path,
 ) -> None:
     with _migrated_engine() as engine, Session(engine) as session:
+        bootstrap_element_identities(session)
         first = import_consolidated_release(session, consolidated_source)
         session.commit()
         ids_after_first = dict(
@@ -75,10 +81,14 @@ def test_release_import_is_complete_idempotent_and_queryable(
         assert first.catalog_reactions_imported == 183
         assert first.m05_reactions_materialized == 175
         assert first.catalog_only_reactions == 8
+        assert first.knowledge_records_imported == 127
+        assert first.structure_records_imported == 69
         assert _count(session, CatalogSpeciesRow) == 309
         assert _count(session, CatalogSourceCrosswalkRow) == 309
         assert _count(session, CatalogTeachingProjectionRow) == 309
         assert _count(session, CatalogStructureLinkRow) == 69
+        assert _count(session, CatalogStructureRecordRow) == 69
+        assert _count(session, CatalogKnowledgeRecordRow) == 127
         assert _count(session, CatalogReactionRow) == 183
         assert _count(session, ReactionRow) == 175
 
@@ -129,6 +139,35 @@ def test_release_import_is_complete_idempotent_and_queryable(
         assert all(isinstance(value, UUID) for value in ids_after_first.values())
 
         reader = PostgresCatalogReader(session)
+        sodium = reader.search_species(query="钠离子", limit=1)[0]
+        structure = reader.get_structure_entry(sodium.application_id)
+        assert structure is not None
+        assert structure.canonical_smiles == "[Na+]"
+        sodium_element_id = session.scalar(
+            select(ElementDataBase.metadata.tables["element"].c.id).where(
+                ElementDataBase.metadata.tables["element"].c.atomic_number == 11
+            )
+        )
+        assert sodium_element_id is not None
+        sodium_page = PostgresElementWikiReader(
+            session,
+            PostgresPeriodicTableReader(session),
+            reader,
+        ).get_element(sodium_element_id)
+        assert sodium_page is not None
+        assert sodium_page.sections.ions
+        assert sodium_page.sections.substances
+        assert sodium_page.sections.reactions
+        assert sodium_page.sections.concepts
+        assert sodium_page.sections.phenomena
+        assert any(
+            node.href and node.href.startswith("/equation-lab?reaction=")
+            for node in sodium_page.sections.reactions
+        )
+        assert any(
+            node.href and node.href.startswith("/structure-lab?species=")
+            for node in [*sodium_page.sections.ions, *sodium_page.sections.substances]
+        )
         assert reader.search_species(query="硫酸", limit=5)[0].name_zh == "硫酸"
         assert reader.search_species(query="硫酸根", limit=5)[0].name_zh == "硫酸根离子"
         assert reader.search_species(query="sulfate", limit=5)[0].name_zh == "硫酸根离子"

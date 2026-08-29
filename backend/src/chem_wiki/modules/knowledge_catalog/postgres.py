@@ -8,15 +8,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .persistence import (
+    CatalogKnowledgeRecordRow,
     CatalogReactionParticipantRow,
     CatalogReactionRow,
     CatalogSpeciesRow,
+    CatalogStructureLinkRow,
+    CatalogStructureRecordRow,
     CatalogTeachingProjectionRow,
 )
 from .read_model import (
+    CatalogKnowledgeResult,
     CatalogReactionParticipantResult,
     CatalogReactionResult,
     CatalogSpeciesResult,
+    CatalogStructureEntry,
 )
 
 EQUATION_MODES = {"molecular", "ionic", "net_ionic"}
@@ -163,8 +168,7 @@ class PostgresCatalogReader:
             select(CatalogReactionParticipantRow, CatalogSpeciesRow)
             .outerjoin(
                 CatalogSpeciesRow,
-                CatalogSpeciesRow.consolidated_id
-                == CatalogReactionParticipantRow.species_id,
+                CatalogSpeciesRow.consolidated_id == CatalogReactionParticipantRow.species_id,
             )
             .where(CatalogReactionParticipantRow.reaction_id == consolidated_id)
             .order_by(CatalogReactionParticipantRow.ordinal)
@@ -206,6 +210,116 @@ class PostgresCatalogReader:
             equation_status=row.original_payload.get("equation_status"),
             reversible=row.original_payload.get("reversible"),
             provenance_refs=list(row.original_payload["provenance_refs"]),
+        )
+
+    def get_species_by_consolidated_ids(
+        self, consolidated_ids: list[str]
+    ) -> list[CatalogSpeciesResult]:
+        order = {value: index for index, value in enumerate(consolidated_ids)}
+        if not order:
+            return []
+        rows = self._session.execute(
+            select(CatalogSpeciesRow, CatalogTeachingProjectionRow)
+            .join(
+                CatalogTeachingProjectionRow,
+                CatalogTeachingProjectionRow.species_id == CatalogSpeciesRow.consolidated_id,
+            )
+            .where(CatalogSpeciesRow.consolidated_id.in_(order))
+        ).all()
+        rows.sort(key=lambda item: order[item[0].consolidated_id])
+        return [
+            CatalogSpeciesResult(
+                consolidated_id=species.consolidated_id,
+                application_id=species.application_id,
+                entity_kind=species.entity_kind,
+                name_zh=species.name_zh,
+                name_en=species.name_en,
+                formula=species.formula,
+                charge=species.charge,
+                composition=species.composition,
+                aliases=species.aliases,
+                chemical_classifications=species.chemical_classifications,
+                primary_category=projection.primary_category,
+                tags=projection.tags,
+                default_priority=projection.default_priority,
+                default_palette_rank=projection.default_palette_rank,
+                equation_modes={
+                    "molecular": projection.molecular_suitability,
+                    "ionic": projection.ionic_suitability,
+                    "net_ionic": projection.net_ionic_suitability,
+                },
+            )
+            for species, projection in rows
+        ]
+
+    def get_reactions_by_consolidated_ids(
+        self, consolidated_ids: list[str]
+    ) -> list[CatalogReactionResult]:
+        return [
+            reaction
+            for consolidated_id in consolidated_ids
+            if (reaction := self.get_reaction(consolidated_id)) is not None
+        ]
+
+    def find_knowledge_for_reactions(
+        self, reactions: list[CatalogReactionResult]
+    ) -> list[CatalogKnowledgeResult]:
+        source_keys = {(item.source_package, item.source_id) for item in reactions}
+        if not source_keys:
+            return []
+        rows = self._session.scalars(select(CatalogKnowledgeRecordRow)).all()
+        priority = {"core": 0, "common": 1, "extended": 2}
+        matched = [
+            row
+            for row in rows
+            if any(
+                (row.source_package, related_id) in source_keys
+                for related_id in row.related_reaction_ids
+            )
+        ]
+        matched.sort(
+            key=lambda row: (
+                priority.get(row.teaching_priority, 9),
+                row.source_type,
+                row.consolidated_id,
+            )
+        )
+        return [
+            CatalogKnowledgeResult(
+                consolidated_id=row.consolidated_id,
+                application_id=row.application_id,
+                source_type=row.source_type,
+                display_name_zh=row.display_name_zh,
+                teaching_priority=row.teaching_priority,
+                content_zh=row.content_zh,
+                related_reaction_ids=list(row.related_reaction_ids),
+                related_species_ids=list(row.related_species_ids),
+            )
+            for row in matched
+        ]
+
+    def get_structure_entry(self, application_species_id: UUID) -> CatalogStructureEntry | None:
+        row = self._session.execute(
+            select(CatalogStructureLinkRow, CatalogStructureRecordRow)
+            .join(
+                CatalogStructureRecordRow,
+                CatalogStructureRecordRow.published_structure_id
+                == CatalogStructureLinkRow.published_structure_id,
+            )
+            .where(CatalogStructureLinkRow.application_species_id == application_species_id)
+            .order_by(CatalogStructureLinkRow.source_link_id)
+        ).first()
+        if row is None:
+            return None
+        link, structure = row
+        return CatalogStructureEntry(
+            application_species_id=link.application_species_id,
+            published_structure_id=structure.published_structure_id,
+            structure_scope=structure.structure_scope,
+            canonical_smiles=structure.canonical_smiles,
+            isomeric_smiles=structure.isomeric_smiles,
+            molecular_formula=structure.molecular_formula,
+            formal_charge=structure.formal_charge,
         )
 
     def find_reactions_by_application_ids(

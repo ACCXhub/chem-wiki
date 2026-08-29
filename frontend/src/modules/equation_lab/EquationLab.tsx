@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react'
 
 import { loadPeriodicTableElements } from '../periodic_table'
-import { balanceEquation, findReactionCandidates, searchCatalogSpecies } from './api'
+import { balanceEquation, findReactionCandidates, loadCatalogReaction, searchCatalogSpecies } from './api'
 import ChemistryNotation from './ChemistryNotation'
 import SpeciesBlock from './palette/SpeciesBlock'
 import ReactionCandidates from './reaction-builder/ReactionCandidates'
@@ -29,6 +29,7 @@ import type {
   BuilderBlock,
   BuilderTrayEntry,
   CatalogSpecies,
+  CatalogReactionEntry,
   CatalogSpeciesQuery,
   EquationDraft,
   EquationDraftParticipant,
@@ -42,6 +43,7 @@ import './equation-lab.css'
 
 interface EquationLabProps {
   onBack: () => void
+  reactionId?: string | null
 }
 
 type PaletteMode = 'search' | 'builder'
@@ -66,6 +68,7 @@ type FindCandidates = (
 ) => Promise<ReactionCandidate[]>
 
 const NO_REACTION_CANDIDATES: FindCandidates = async () => []
+type LoadReaction = (consolidatedId: string, signal?: AbortSignal) => Promise<CatalogReactionEntry>
 
 interface EquationLabViewProps extends EquationLabProps {
   onBalance: (
@@ -75,6 +78,8 @@ interface EquationLabViewProps extends EquationLabProps {
   onSearch?: SearchSpecies
   onFindCandidates?: FindCandidates
   onLoadElements?: () => Promise<PeriodicTableElement[]>
+  reactionId?: string | null
+  onLoadReaction?: LoadReaction
 }
 
 const EXAMPLES: Array<{
@@ -159,6 +164,8 @@ export function EquationLabView({
   onSearch = searchCatalogSpecies,
   onFindCandidates = NO_REACTION_CANDIDATES,
   onLoadElements = loadPeriodicTableElements,
+  reactionId = null,
+  onLoadReaction = loadCatalogReaction,
 }: EquationLabViewProps) {
   const [history, setHistory] = useState<DraftHistory>({ past: [], present: EMPTY_DRAFT, future: [] })
   const draft = history.present
@@ -192,6 +199,42 @@ export function EquationLabView({
   const [candidateLoading, setCandidateLoading] = useState(false)
   const [candidateError, setCandidateError] = useState<string | null>(null)
   const balanceRequestId = useRef(0)
+  const loadedReactionId = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!reactionId || loadedReactionId.current === reactionId) return
+    const controller = new AbortController()
+    void onLoadReaction(reactionId, controller.signal).then(async (reaction) => {
+      const applicationIds = reaction.participants.flatMap((participant) => (
+        participant.applicationTargetId ? [participant.applicationTargetId] : []
+      ))
+      const species = await onSearch({
+        applicationIds,
+        equationMode: 'molecular',
+        limit: 50,
+      }, controller.signal)
+      if (controller.signal.aborted) return
+      const speciesById = new Map(species.map((item) => [item.applicationId, item]))
+      const next: EquationDraft = { mode: 'molecular', reactants: [], products: [] }
+      for (const participant of reaction.participants) {
+        const match = participant.applicationTargetId
+          ? speciesById.get(participant.applicationTargetId)
+          : undefined
+        if (!match || (participant.role !== 'reactant' && participant.role !== 'product')) continue
+        next[participant.role === 'reactant' ? 'reactants' : 'products'].push({
+          ...match,
+          phase: participant.phase,
+        })
+      }
+      loadedReactionId.current = reactionId
+      setHistory({ past: [], present: next, future: [] })
+      setSelectedReactionId(reaction.consolidatedId)
+    }).catch((reason: unknown) => {
+      if (reason instanceof DOMException && reason.name === 'AbortError') return
+      setCatalogError(reason instanceof Error ? reason.message : '反应加载失败')
+    })
+    return () => controller.abort()
+  }, [onLoadReaction, onSearch, reactionId])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -619,7 +662,6 @@ export function EquationLabView({
 
       <header className="equation-lab-header">
         <div>
-          <p className="eyebrow">M07 · Reaction Builder</p>
           <h1>方程实验室</h1>
           <p>把物质放入方程，逐步找到并完成已知反应。</p>
         </div>
@@ -945,6 +987,13 @@ function BuilderBlockGroup({
   )
 }
 
-export default function EquationLab({ onBack }: EquationLabProps) {
-  return <EquationLabView onBack={onBack} onBalance={balanceEquation} onFindCandidates={findReactionCandidates} />
+export default function EquationLab({ onBack, reactionId }: EquationLabProps) {
+  return (
+    <EquationLabView
+      onBack={onBack}
+      onBalance={balanceEquation}
+      onFindCandidates={findReactionCandidates}
+      reactionId={reactionId}
+    />
+  )
 }

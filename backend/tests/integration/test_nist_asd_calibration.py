@@ -275,3 +275,25 @@ def test_nist_calibrates_pubchem_without_changing_identity_and_is_idempotent() -
             )
             == FIRST_RETRIEVAL
         )
+
+        pubchem_after_nist = import_pubchem_elements(
+            session,
+            adapter=PubChemAdapter(
+                fetch_json=lambda _url, _timeout: PUBCHEM_HYDROGEN,
+                clock=lambda: SECOND_RETRIEVAL,
+            ),
+            atomic_numbers={1},
+        )
+        session.commit()
+        assert pubchem_after_nist.publications_changed == 0
+        protected_publication = (
+            session.execute(
+                select(tables["element_published_value"]).where(
+                    tables["element_published_value"].c.element_id == identities_before[0].id,
+                    tables["element_published_value"].c.field_name == "first_ionization_energy",
+                )
+            )
+            .one()
+            ._mapping
+        )
+        assert protected_publication["policy_version"] == "m02-nist-asd-v1"

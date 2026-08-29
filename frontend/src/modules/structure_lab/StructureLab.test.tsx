@@ -73,8 +73,8 @@ test('analyzes an edited structure and links functional groups to 2D and 3D view
 
   fireEvent.mouseEnter(screen.getByRole('button', { name: /醇羟基/ }))
   expect(document.querySelector('[data-highlighted-atom="2"]')).toBeInTheDocument()
-  expect(screen.getByText('RDKit Functional_Group_Hierarchy.txt')).toBeInTheDocument()
-  expect(screen.getByText('不构造反应，也不推断机理')).toBeInTheDocument()
+  expect(screen.queryByText('RDKit Functional_Group_Hierarchy.txt')).not.toBeInTheDocument()
+  expect(screen.getByText('结构分析范围')).toBeInTheDocument()
 })
 
 test('keeps loading and unsupported chemistry states explicit', async () => {
@@ -149,7 +149,7 @@ test('isolates a failed chemistry editor and keeps the SMILES fallback usable', 
   )
 
   expect(screen.getByRole('status')).toHaveTextContent(
-    'Ketcher 编辑器加载失败，可继续使用 SMILES 输入',
+    '结构编辑器加载失败，可继续使用 SMILES 输入',
   )
   expect(screen.getByLabelText('SMILES')).toBeEnabled()
   consoleError.mockRestore()

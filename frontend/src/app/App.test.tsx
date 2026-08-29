@@ -19,7 +19,7 @@ test('renders the periodic-table entry and its loading state', async () => {
       name: '高中化学交互式 Wiki',
     }),
   ).toBeInTheDocument()
-  expect(screen.getByText('正在读取 canonical 元素数据…')).toBeInTheDocument()
+  expect(screen.getByText('正在读取元素数据…')).toBeInTheDocument()
 })
 
 
@@ -93,7 +93,7 @@ test('opens the M05 Equation Lab from the main application route', async () => {
   render(<App />)
 
   expect(screen.getByRole('heading', { level: 1, name: '方程实验室' })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: '配平并验证' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '手动输入' })).toBeInTheDocument()
 })
 
 

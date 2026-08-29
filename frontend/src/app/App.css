@@ -1,15 +1,14 @@
 .lab-entry-cluster {
-  position: fixed;
-  z-index: 20;
-  right: 1rem;
-  bottom: 1rem;
+  width: min(1720px, calc(100% - 2rem));
+  margin: 0.75rem auto -0.5rem;
   display: flex;
+  justify-content: flex-end;
   gap: .5rem;
   padding: .35rem;
   border: 1px solid rgba(160, 207, 190, .18);
   border-radius: 99px;
   background: rgba(7, 19, 16, .9);
-  box-shadow: 0 .8rem 2rem rgba(0, 0, 0, .3);
+  box-shadow: none;
   backdrop-filter: blur(12px);
 }
 
@@ -41,9 +40,8 @@
 
 @media (max-width: 520px) {
   .lab-entry-cluster {
-    right: .65rem;
-    bottom: .65rem;
-    left: .65rem;
+    width: calc(100% - 1.4rem);
+    margin-bottom: 0;
     justify-content: center;
   }
 

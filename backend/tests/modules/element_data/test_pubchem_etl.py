@@ -188,6 +188,25 @@ def test_adapter_rejects_rows_that_do_not_match_the_official_column_schema() -> 
         adapter.fetch_elements({1})
 
 
+def test_versioned_snapshot_adapter_validates_and_selects_real_elements() -> None:
+    pubchem = _load_module()
+
+    records = pubchem.PubChemSnapshotAdapter().fetch_elements({1, 6, 8, 17, 26})
+    normalized = [pubchem.PubChemSnapshotAdapter.normalize(record) for record in records]
+
+    assert [item.symbol for item in normalized] == ["H", "C", "O", "Cl", "Fe"]
+    assert all(
+        any(claim.field_name == "first_ionization_energy" for claim in item.claims)
+        for item in normalized
+    )
+    assert (
+        pubchem.PubChemSnapshotAdapter.normalize(
+            pubchem.PubChemSnapshotAdapter().fetch_elements({13})[0]
+        ).name_en
+        == "aluminum"
+    )
+
+
 def test_normalizer_rejects_invalid_m01_identity_values() -> None:
     pubchem = _load_module()
     valid = _adapter(pubchem).fetch_elements({1})[0]

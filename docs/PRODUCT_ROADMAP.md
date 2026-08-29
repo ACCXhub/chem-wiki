@@ -80,7 +80,7 @@ Curated lists such as `hsiaoyi0504/awesome-cheminformatics` are discovery indexe
 | molecule sketch/edit | Ketcher | integrated | keep |
 | chemistry/structure computation | RDKit | integrated | keep as primary structure engine |
 | interactive small-molecule 3D | 3Dmol.js | integrated | keep |
-| local knowledge-graph rendering/layout | Cytoscape.js (+ fCoSE when useful) | planned | integrate in Element Wiki |
+| local knowledge-graph rendering/layout | Cytoscape.js | integrated | Element Wiki interactive concentric graph |
 | standard chemistry/equation typesetting | KaTeX + mhchem | planned | integrate in Reaction experience |
 
 ### Evaluate before custom chemistry computation
@@ -108,30 +108,30 @@ Project-specific custom Codex skills stay deliberately small:
 
 Debugging, TDD, verification, React performance and similar framework skills are used from the system/framework when relevant rather than copied into the project skill repository.
 
-## Phase 1 — Product integration reset
+## Phase 1 — Product integration reset（已实现）
 
 **Goal:** make the existing data foundation visible through a complete Element exploration loop.
 
 ### Element properties
 
-- make normal local data setup publish supported PubChem snapshot properties through the existing M02 source → claim → publication → property pipeline;
-- retain NIST as the preferred owner where the current policy selects a higher-quality first-ionization value;
-- make Periodic Table electronegativity and first-ionization views show real application data for supported elements.
+- normal local data setup publishes the versioned PubChem snapshot through the existing M02 source → claim → publication → property pipeline;
+- NIST remains the preferred publication where the current policy has a higher-quality first-ionization value;
+- Periodic Table electronegativity and first-ionization views consume the published application read model.
 
 ### Element Wiki
 
-Replace placeholder/empty related sections with bounded application read data:
+The Element Wiki exposes bounded, deterministic application read data:
 
 - core/common ions;
 - core/common substances;
 - high-priority reactions involving those species;
 - reviewed directly related concepts and phenomena where available.
 
-Use deterministic ranking and limits so the page remains a learning surface rather than a raw database dump.
+The neighborhood is limited to four ions, six substances, six reactions, three concepts and three phenomena.
 
 ### Knowledge graph
 
-Use Cytoscape.js for the Element Wiki local graph. The backend owns graph semantics and returns typed nodes/edges; Cytoscape owns interactive rendering and layout.
+Cytoscape.js renders the Element Wiki local graph. The backend owns graph semantics and returns typed nodes/edges; Cytoscape owns interactive rendering, concentric layout and selection.
 
 The graph must lead somewhere:
 
@@ -141,7 +141,7 @@ The graph must lead somewhere:
 
 ### Structure entry
 
-Allow Structure Lab to receive a known catalog species/accepted Structure link and converge on the existing Ketcher + RDKit + 3Dmol surface. Manual SMILES input remains available but is no longer the only entry path.
+Structure Lab accepts a known catalog species/accepted Structure link, loads its canonical SMILES and converges on the existing Ketcher + RDKit + 3Dmol surface. Manual SMILES input remains available but is no longer the only entry path.
 
 ### Periodic Table presentation
 

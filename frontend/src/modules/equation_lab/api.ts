@@ -5,6 +5,7 @@ import type {
   EquationMode,
   ReactionCandidate,
   ReactionCandidateQuery,
+  CatalogReactionEntry,
 } from './types'
 
 
@@ -81,4 +82,19 @@ export async function findReactionCandidates(
   }
   const payload = (await response.json()) as { candidates: ReactionCandidate[] }
   return payload.candidates
+}
+
+export async function loadCatalogReaction(
+  consolidatedId: string,
+  signal?: AbortSignal,
+): Promise<CatalogReactionEntry> {
+  const response = await fetch(`/v1/catalog/reactions/${encodeURIComponent(consolidatedId)}`, {
+    headers: { Accept: 'application/json' },
+    signal,
+  })
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as ErrorPayload | null
+    throw apiError(payload, response.status, '反应加载失败')
+  }
+  return (await response.json()) as CatalogReactionEntry
 }

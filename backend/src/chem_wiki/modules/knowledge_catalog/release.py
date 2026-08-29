@@ -13,6 +13,7 @@ CONSUMED_ARTIFACTS = (
     "structure_links.jsonl",
     "reactions.jsonl",
     "teaching_projection.jsonl",
+    "knowledge_records.jsonl",
 )
 
 
@@ -36,6 +37,7 @@ PINNED_RELEASE = PinnedRelease(
         ("structure_links", 69),
         ("reactions", 183),
         ("teaching_projections", 309),
+        ("knowledge_records", 637),
     ),
 )
 
@@ -180,6 +182,7 @@ def verify_release(
         "structure_links.jsonl": dict(PINNED_RELEASE.expected_counts)["structure_links"],
         "reactions.jsonl": dict(PINNED_RELEASE.expected_counts)["reactions"],
         "teaching_projection.jsonl": dict(PINNED_RELEASE.expected_counts)["teaching_projections"],
+        "knowledge_records.jsonl": dict(PINNED_RELEASE.expected_counts)["knowledge_records"],
     }
     for name in CONSUMED_ARTIFACTS:
         metadata = files.get(name)

@@ -52,6 +52,7 @@ export interface KnowledgeNode {
   label: string
   secondaryLabel?: string | null
   href?: string | null
+  description?: string | null
 }
 
 export interface KnowledgeEdge {

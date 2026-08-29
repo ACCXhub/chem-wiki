@@ -14,7 +14,7 @@ from chem_wiki.config import Settings
 from chem_wiki.infrastructure.database import create_database_engine, create_session_factory
 
 from .postgres import PostgresCatalogReader
-from .read_model import CatalogReactionResult, CatalogSpeciesResult
+from .read_model import CatalogReactionResult, CatalogSpeciesResult, CatalogStructureEntry
 
 
 class CatalogReader(Protocol):
@@ -36,6 +36,8 @@ class CatalogReader(Protocol):
     def find_reactions_by_application_ids(
         self, application_ids: list[UUID]
     ) -> list[CatalogReactionResult]: ...
+
+    def get_structure_entry(self, application_species_id: UUID) -> CatalogStructureEntry | None: ...
 
 
 @lru_cache(maxsize=1)
@@ -112,3 +114,14 @@ def get_reaction(
     if reaction is None:
         raise HTTPException(status_code=404, detail="未找到 catalog Reaction")
     return reaction
+
+
+@router.get("/species/{application_species_id}/structure", response_model=CatalogStructureEntry)
+def get_species_structure(
+    application_species_id: UUID,
+    reader: Annotated[CatalogReader, Depends(get_catalog_reader)],
+) -> CatalogStructureEntry:
+    entry = reader.get_structure_entry(application_species_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="该物质没有可用结构")
+    return entry

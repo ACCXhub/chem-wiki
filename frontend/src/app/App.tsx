@@ -15,36 +15,40 @@ function elementIdFromPath(pathname: string): string | null {
 }
 
 function App() {
-  const [pathname, setPathname] = useState(() => window.location.pathname)
+  const [locationKey, setLocationKey] = useState(
+    () => `${window.location.pathname}${window.location.search}`,
+  )
 
   useEffect(() => {
-    const handlePopState = () => setPathname(window.location.pathname)
+    const handlePopState = () => setLocationKey(`${window.location.pathname}${window.location.search}`)
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
   const navigate = useCallback((nextPath: string) => {
     window.history.pushState(null, '', nextPath)
-    setPathname(nextPath)
+    setLocationKey(nextPath)
   }, [])
 
+  const location = new URL(locationKey, window.location.origin)
+  const pathname = location.pathname
   const elementId = elementIdFromPath(pathname)
   if (pathname === '/equation-lab') {
-    return <EquationLab onBack={() => navigate('/')} />
+    return <EquationLab onBack={() => navigate('/')} reactionId={location.searchParams.get('reaction')} />
   }
   if (pathname === '/structure-lab') {
     return (
       <Suspense fallback={<main className="app-route-loading">正在打开结构实验室…</main>}>
-        <StructureLab onBack={() => navigate('/')} />
+        <StructureLab onBack={() => navigate('/')} speciesId={location.searchParams.get('species')} />
       </Suspense>
     )
   }
   if (elementId) {
-    return <ElementWiki elementId={elementId} onBack={() => navigate('/')} />
+    return <ElementWiki elementId={elementId} onBack={() => navigate('/')} onNavigate={navigate} />
   }
   return (
     <>
-      <nav className="lab-entry-cluster" aria-label="实验室入口">
+      <nav className="lab-entry-cluster" aria-label="学习工具">
         <button className="structure-lab-entry" type="button" onClick={() => navigate('/structure-lab')}>
           结构实验室
         </button>

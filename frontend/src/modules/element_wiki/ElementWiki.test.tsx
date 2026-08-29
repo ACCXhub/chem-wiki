@@ -93,8 +93,8 @@ test('renders structured identity, calibrated properties, sources, and honest gr
   expect(screen.getByText('相对原子质量').closest('article')).toHaveTextContent(
     '暂无数据',
   )
-  expect(screen.getByRole('heading', { name: '相关物质' })).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: '相关反应' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: '元素关系图' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: '常见离子' })).toBeInTheDocument()
   expect(screen.getByText('暂无已审核的相关物质、反应或概念数据')).toBeInTheDocument()
   expect(
     screen.getByRole('link', { name: 'NIST Atomic Spectra Database' }),

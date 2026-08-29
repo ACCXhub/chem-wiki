@@ -1,0 +1,4 @@
+backend/src/chem_wiki/modules/element_data/seeds/pubchem-periodic-table.json text eol=lf
+backend/src/chem_wiki/modules/element_data/seeds/pubchem-periodic-table.meta.json text eol=lf
+backend/src/chem_wiki/modules/element_data/seeds/element-teaching-relations.jsonl text eol=lf
+backend/src/chem_wiki/modules/element_data/seeds/element-teaching-relations.meta.json text eol=lf
