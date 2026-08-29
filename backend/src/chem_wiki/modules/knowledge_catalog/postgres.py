@@ -11,6 +11,7 @@ from .persistence import (
     CatalogKnowledgeRecordRow,
     CatalogReactionParticipantRow,
     CatalogReactionRow,
+    CatalogSourceAttributionRow,
     CatalogSpeciesRow,
     CatalogStructureLinkRow,
     CatalogStructureRecordRow,
@@ -18,14 +19,18 @@ from .persistence import (
 )
 from .read_model import (
     CatalogKnowledgeResult,
+    CatalogReactionDetail,
     CatalogReactionParticipantResult,
     CatalogReactionResult,
+    CatalogRelatedSpeciesResult,
+    CatalogSourceAttributionResult,
     CatalogSpeciesResult,
     CatalogStructureEntry,
 )
 
 EQUATION_MODES = {"molecular", "ionic", "net_ionic"}
 SUITABILITY_RANK = {"recommended": 0, "available": 1, "deemphasized": 2}
+TEACHING_PRIORITY_RANK = {"core": 0, "common": 1, "extended": 2}
 
 
 def _normalize(value: str) -> str:
@@ -160,6 +165,105 @@ class PostgresCatalogReader:
             for _, _, _, _, species, projection in ranked[:limit]
         ]
 
+    def complete_species(
+        self,
+        *,
+        composition: dict[str, int],
+        equation_mode: str | None = None,
+        entity_kind: Literal["ion", "substance"] = "substance",
+        limit: int = 20,
+    ) -> list[CatalogSpeciesResult]:
+        if not composition or any(count <= 0 for count in composition.values()):
+            raise ValueError("completion composition 必须包含正整数元素计数")
+        if not 1 <= limit <= 50:
+            raise ValueError("catalog result limit 必须在 1 到 50 之间")
+        if equation_mode is not None and equation_mode not in EQUATION_MODES:
+            raise ValueError("不支持的 equation mode")
+
+        statement = (
+            select(CatalogSpeciesRow, CatalogTeachingProjectionRow)
+            .join(
+                CatalogTeachingProjectionRow,
+                CatalogTeachingProjectionRow.species_id == CatalogSpeciesRow.consolidated_id,
+            )
+            .where(CatalogSpeciesRow.entity_kind == entity_kind)
+        )
+        ranked: list[
+            tuple[
+                int,
+                int,
+                int,
+                int,
+                int,
+                int,
+                int,
+                int,
+                str,
+                CatalogSpeciesRow,
+                CatalogTeachingProjectionRow,
+            ]
+        ] = []
+        selected_elements = set(composition)
+        for species, projection in self._session.execute(statement):
+            candidate = species.composition
+            if species.entity_kind != entity_kind or not candidate:
+                continue
+            if not selected_elements <= set(candidate):
+                continue
+            exact_rank = 0 if candidate == composition else 1
+            deficit = sum(max(composition[element] - candidate[element], 0) for element in composition)
+            count_satisfaction_rank = 0 if deficit == 0 else 1
+            extra_elements = len(set(candidate) - selected_elements)
+            extra_atoms = sum(
+                max(count - composition.get(element, 0), 0)
+                for element, count in candidate.items()
+            )
+            suitability_rank = (
+                SUITABILITY_RANK[_equation_suitability(projection, equation_mode)]
+                if equation_mode
+                else 0
+            )
+            ranked.append(
+                (
+                    exact_rank,
+                    count_satisfaction_rank,
+                    deficit,
+                    extra_elements,
+                    extra_atoms,
+                    suitability_rank,
+                    TEACHING_PRIORITY_RANK.get(projection.default_priority, 9),
+                    projection.default_palette_rank,
+                    species.consolidated_id,
+                    species,
+                    projection,
+                )
+            )
+        ranked.sort(key=lambda item: item[:9])
+        return [
+            CatalogSpeciesResult(
+                consolidated_id=species.consolidated_id,
+                application_id=species.application_id,
+                entity_kind=species.entity_kind,
+                name_zh=species.name_zh,
+                name_en=species.name_en,
+                formula=species.formula,
+                charge=species.charge,
+                composition=species.composition,
+                aliases=species.aliases,
+                chemical_classifications=species.chemical_classifications,
+                primary_category=projection.primary_category,
+                tags=projection.tags,
+                default_priority=projection.default_priority,
+                default_palette_rank=projection.default_palette_rank,
+                equation_modes={
+                    "molecular": projection.molecular_suitability,
+                    "ionic": projection.ionic_suitability,
+                    "net_ionic": projection.net_ionic_suitability,
+                },
+            )
+            for *_, species, projection in ranked[:limit]
+        ]
+
     def get_reaction(self, consolidated_id: str) -> CatalogReactionResult | None:
         row = self._session.get(CatalogReactionRow, consolidated_id)
         if row is None:
@@ -251,6 +355,40 @@ class PostgresCatalogReader:
             )
             for species, projection in rows
         ]
+
+    def get_reaction_detail(self, consolidated_id: str) -> CatalogReactionDetail | None:
+        reaction = self.get_reaction(consolidated_id)
+        if reaction is None:
+            return None
+        knowledge = self.find_knowledge_for_reactions([reaction])
+        participant_species_ids = list(
+            dict.fromkeys(
+                participant.species_id
+                for participant in reaction.participants
+                if participant.species_id is not None
+            )
+        )
+        related_species = [
+            CatalogRelatedSpeciesResult(
+                **species.model_dump(),
+                structure_available=self.get_structure_entry(species.application_id) is not None,
+            )
+            for species in self.get_species_by_consolidated_ids(participant_species_ids)
+        ]
+        source_rows = self._session.scalars(
+            select(CatalogSourceAttributionRow)
+            .where(CatalogSourceAttributionRow.source_ref.in_(reaction.provenance_refs))
+            .order_by(CatalogSourceAttributionRow.source_ref)
+        ).all()
+        return CatalogReactionDetail(
+            **reaction.model_dump(),
+            concepts=[item for item in knowledge if item.source_type == "concept"],
+            phenomena=[item for item in knowledge if item.source_type == "phenomenon"],
+            related_species=related_species,
+            sources=[
+                CatalogSourceAttributionResult(name=row.name, url=row.url) for row in source_rows
+            ],
+        )
 
     def get_reactions_by_consolidated_ids(
         self, consolidated_ids: list[str]

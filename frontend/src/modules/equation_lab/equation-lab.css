@@ -146,7 +146,8 @@
 
 .copy-equation, .history-button, .manual-input-toggle { padding: .25rem .38rem; border: 1px solid #315247; border-radius: .36rem; color: #9db7ad; background: #081814; font-size: .58rem; cursor: pointer; }
 .history-button:disabled { cursor: default; opacity: .35; }
-.focused-reaction-knowledge { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-top: .55rem; padding: .45rem .6rem; border-top: 1px solid rgba(160, 207, 190, .12); color: #9fb3ac; font-size: .63rem; }
+.focused-reaction-knowledge { display: grid; gap: .42rem; margin-top: .55rem; padding: .45rem .6rem; border-top: 1px solid rgba(160, 207, 190, .12); color: #9fb3ac; font-size: .63rem; }
+.focused-reaction-summary { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .9rem; }
 .focused-reaction-title { display: flex; gap: .45rem; align-items: baseline; }
 .focused-reaction-title span,
 .focused-reaction-knowledge p span { margin-right: .35rem; color: #71877f; }
@@ -154,6 +155,23 @@
 .focused-reaction-knowledge p { margin: 0; }
 .focused-reaction-knowledge details summary { color: #9ccdbd; cursor: pointer; }
 .focused-reaction-knowledge details p { margin-top: .4rem; overflow-wrap: anywhere; }
+.focused-reaction-summary > .chem-equation { color: #f1d087; font-size: .82rem; }
+.reaction-detail-state { color: #789087; }
+.reaction-detail-state.is-error { color: #efb8aa; }
+.reaction-learning-detail { display: flex; flex-wrap: wrap; align-items: start; gap: .35rem .75rem; }
+.reaction-learning-item,
+.reaction-related-species,
+.reaction-sources { min-width: 0; }
+.reaction-learning-item[open] { flex: 1 1 18rem; }
+.reaction-learning-item p { max-width: 34rem; color: #b9cbc5; line-height: 1.55; }
+.reaction-species-list { display: grid; gap: .3rem; min-width: min(28rem, 78vw); margin-top: .4rem; }
+.reaction-species-item { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .3rem .38rem; border-top: 1px solid rgba(160, 207, 190, .1); }
+.reaction-species-item > span { display: inline-flex; align-items: center; gap: .35rem; min-width: 0; }
+.reaction-species-item > span .chem-notation { color: #f1d087; font-size: .82rem; }
+.reaction-species-item > div { display: flex; flex-wrap: wrap; justify-content: end; gap: .22rem; }
+.reaction-species-item button { padding: .2rem .3rem; border: 1px solid #315247; border-radius: .32rem; color: #9ccdbd; background: transparent; font-size: .56rem; cursor: pointer; }
+.reaction-sources ul { display: grid; gap: .3rem; max-width: 38rem; margin: .4rem 0 0; padding-left: 1rem; }
+.reaction-sources a { color: #b7d8cd; }
 .balance-tools { margin-top: .5rem; color: #71877f; font-size: .62rem; }
 .balance-tools summary { cursor: pointer; }
 .balance-tool-row { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin-top: .5rem; }
@@ -173,6 +191,7 @@
 .reaction-cluster::before { position: absolute; inset: 1.55rem 6.5rem; border: 1px solid rgba(160, 207, 190, .12); border-radius: 50%; content: ""; }
 .reaction-candidate { position: absolute; left: 50%; top: 50%; display: grid; gap: .2rem; width: min(13rem, 30vw); padding: .55rem .65rem; overflow: hidden; border: 1px solid #315247; border-radius: .65rem; color: #b9cec7; background: #0c211b; text-align: left; cursor: pointer; transition: transform 150ms ease, border-color 150ms ease, background 150ms ease; }
 .reaction-candidate strong { overflow: hidden; color: #e2c681; font: 500 .82rem Georgia, "Noto Serif SC", serif; text-overflow: ellipsis; white-space: nowrap; }
+.reaction-candidate .chem-equation { display: block; overflow: hidden; text-overflow: ellipsis; }
 .reaction-candidate span { overflow: hidden; font-size: .58rem; text-overflow: ellipsis; white-space: nowrap; }
 .reaction-candidate.is-central { z-index: 2; width: min(15rem, 34vw); transform: translate(-50%, -50%); border-color: #b78e49; background: #302817; box-shadow: 0 .45rem 1.2rem rgba(0, 0, 0, .26); }
 .reaction-candidate.is-alternative { transform: translate(calc(-50% + var(--candidate-x)), calc(-50% + var(--candidate-y))) scale(.82); opacity: .76; }
@@ -285,9 +304,10 @@
 
 .lab-examples { display: flex; flex-wrap: wrap; gap: .35rem; }
 .lab-examples button { padding: .34rem .55rem; border: 1px solid #315247; border-radius: 99px; color: #a9c6bc; background: #10251f; font-size: .62rem; cursor: pointer; }
-.chem-notation { white-space: nowrap; }
-.chem-notation sup { margin-left: .04em; font-size: .66em; }
-.chem-phase { margin-left: .12em; font-size: .72em; }
+.chem-notation,
+.chem-equation { white-space: nowrap; }
+.chem-notation .katex,
+.chem-equation .katex { color: inherit; font-size: 1em; }
 .equation-lab-entry { position: fixed; z-index: 20; right: 1rem; bottom: 1rem; }
 
 @media (max-width: 920px) {
@@ -310,6 +330,8 @@
   .reaction-candidate.is-alternative:focus-visible { position: static; flex: 0 0 12rem; width: 12rem; transform: none; opacity: 1; }
   .builder-layout { grid-template-columns: 1fr; }
   .builder-matches { padding: .5rem 0 0; border-top: 1px solid rgba(160, 207, 190, .14); border-left: 0; }
+  .reaction-learning-detail { display: grid; }
+  .reaction-species-list { min-width: 0; }
 }
 
 @media (max-width: 480px) {

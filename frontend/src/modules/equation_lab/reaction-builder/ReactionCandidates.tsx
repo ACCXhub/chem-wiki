@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 
 import type { ReactionCandidate } from '../types'
+import { ChemistryEquation } from '../ChemistryNotation'
 
 
 interface ReactionCandidatesProps {
@@ -88,7 +89,7 @@ function CandidateButton({
       onClick={() => onSelect(candidate)}
       aria-label={`选择反应 ${candidate.nameZh}`}
     >
-      <strong>{candidateLabel(candidate)}</strong>
+      <strong>{candidate.equation ? <ChemistryEquation expression={candidate.equation} /> : candidateLabel(candidate)}</strong>
       <span>{candidate.nameZh}</span>
     </button>
   )

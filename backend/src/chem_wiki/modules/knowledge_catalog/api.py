@@ -14,7 +14,12 @@ from chem_wiki.config import Settings
 from chem_wiki.infrastructure.database import create_database_engine, create_session_factory
 
 from .postgres import PostgresCatalogReader
-from .read_model import CatalogReactionResult, CatalogSpeciesResult, CatalogStructureEntry
+from .read_model import (
+    CatalogReactionDetail,
+    CatalogReactionResult,
+    CatalogSpeciesResult,
+    CatalogStructureEntry,
+)
 
 
 class CatalogReader(Protocol):
@@ -32,6 +37,17 @@ class CatalogReader(Protocol):
     ) -> list[CatalogSpeciesResult]: ...
 
     def get_reaction(self, consolidated_id: str) -> CatalogReactionResult | None: ...
+
+    def complete_species(
+        self,
+        *,
+        composition: dict[str, int],
+        equation_mode: str | None = None,
+        entity_kind: Literal["ion", "substance"] = "substance",
+        limit: int = 20,
+    ) -> list[CatalogSpeciesResult]: ...
+
+    def get_reaction_detail(self, consolidated_id: str) -> CatalogReactionDetail | None: ...
 
     def find_reactions_by_application_ids(
         self, application_ids: list[UUID]
@@ -105,6 +121,25 @@ def search_species(
     )
 
 
+@router.get("/species/completions", response_model=list[CatalogSpeciesResult])
+def complete_species(
+    reader: Annotated[CatalogReader, Depends(get_catalog_reader)],
+    composition: str,
+    equation_mode: Literal["molecular", "ionic", "net_ionic"] | None = None,
+    entity_kind: Literal["ion", "substance"] = "substance",
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> list[CatalogSpeciesResult]:
+    parsed_composition = _parse_composition(composition)
+    if parsed_composition is None:
+        raise HTTPException(status_code=422, detail="composition 必须包含至少一个元素")
+    return reader.complete_species(
+        composition=parsed_composition,
+        equation_mode=equation_mode,
+        entity_kind=entity_kind,
+        limit=limit,
+    )
+
+
 @router.get("/reactions/{consolidated_id}", response_model=CatalogReactionResult)
 def get_reaction(
     consolidated_id: str,
@@ -114,6 +149,17 @@ def get_reaction(
     if reaction is None:
         raise HTTPException(status_code=404, detail="未找到 catalog Reaction")
     return reaction
+
+
+@router.get("/reactions/{consolidated_id}/detail", response_model=CatalogReactionDetail)
+def get_reaction_detail(
+    consolidated_id: str,
+    reader: Annotated[CatalogReader, Depends(get_catalog_reader)],
+) -> CatalogReactionDetail:
+    detail = reader.get_reaction_detail(consolidated_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="未找到 catalog Reaction")
+    return detail
 
 
 @router.get("/species/{application_species_id}/structure", response_model=CatalogStructureEntry)

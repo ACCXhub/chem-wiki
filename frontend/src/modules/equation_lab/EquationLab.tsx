@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react'
 
 import { loadPeriodicTableElements } from '../periodic_table'
-import { balanceEquation, findReactionCandidates, loadCatalogReaction, searchCatalogSpecies } from './api'
+import {
+  balanceEquation,
+  completeCatalogSpecies,
+  findReactionCandidates,
+  loadCatalogReaction,
+  loadReactionDetail,
+  searchCatalogSpecies,
+} from './api'
 import ChemistryNotation from './ChemistryNotation'
 import SpeciesBlock from './palette/SpeciesBlock'
 import ReactionCandidates from './reaction-builder/ReactionCandidates'
@@ -29,7 +36,9 @@ import type {
   BuilderBlock,
   BuilderTrayEntry,
   CatalogSpecies,
+  CatalogCompletionQuery,
   CatalogReactionEntry,
+  CatalogReactionDetail,
   CatalogSpeciesQuery,
   EquationDraft,
   EquationDraftParticipant,
@@ -43,6 +52,7 @@ import './equation-lab.css'
 
 interface EquationLabProps {
   onBack: () => void
+  onNavigate?: (path: string) => void
   reactionId?: string | null
 }
 
@@ -69,6 +79,14 @@ type FindCandidates = (
 
 const NO_REACTION_CANDIDATES: FindCandidates = async () => []
 type LoadReaction = (consolidatedId: string, signal?: AbortSignal) => Promise<CatalogReactionEntry>
+type CompleteSpecies = (
+  query: CatalogCompletionQuery,
+  signal?: AbortSignal,
+) => Promise<CatalogSpecies[]>
+type LoadReactionDetail = (
+  consolidatedId: string,
+  signal?: AbortSignal,
+) => Promise<CatalogReactionDetail>
 
 interface EquationLabViewProps extends EquationLabProps {
   onBalance: (
@@ -76,10 +94,12 @@ interface EquationLabViewProps extends EquationLabProps {
     mode: EquationMode,
   ) => Promise<BalanceEquationResponse>
   onSearch?: SearchSpecies
+  onCompleteSpecies?: CompleteSpecies
   onFindCandidates?: FindCandidates
   onLoadElements?: () => Promise<PeriodicTableElement[]>
   reactionId?: string | null
   onLoadReaction?: LoadReaction
+  onLoadReactionDetail?: LoadReactionDetail
 }
 
 const EXAMPLES: Array<{
@@ -162,10 +182,13 @@ export function EquationLabView({
   onBack,
   onBalance,
   onSearch = searchCatalogSpecies,
+  onCompleteSpecies = completeCatalogSpecies,
   onFindCandidates = NO_REACTION_CANDIDATES,
   onLoadElements = loadPeriodicTableElements,
   reactionId = null,
   onLoadReaction = loadCatalogReaction,
+  onLoadReactionDetail,
+  onNavigate,
 }: EquationLabViewProps) {
   const [history, setHistory] = useState<DraftHistory>({ past: [], present: EMPTY_DRAFT, future: [] })
   const draft = history.present
@@ -196,6 +219,9 @@ export function EquationLabView({
   const [duplicatePulse, setDuplicatePulse] = useState<string | null>(null)
   const [reactionCandidates, setReactionCandidates] = useState<ReactionCandidate[]>([])
   const [selectedReactionId, setSelectedReactionId] = useState<string | null>(null)
+  const [reactionDetail, setReactionDetail] = useState<CatalogReactionDetail | null>(null)
+  const [reactionDetailLoading, setReactionDetailLoading] = useState(false)
+  const [reactionDetailError, setReactionDetailError] = useState<string | null>(null)
   const [candidateLoading, setCandidateLoading] = useState(false)
   const [candidateError, setCandidateError] = useState<string | null>(null)
   const balanceRequestId = useRef(0)
@@ -342,11 +368,10 @@ export function EquationLabView({
   useEffect(() => {
     if (!builderResolution || paletteMode !== 'builder') return
     const controller = new AbortController()
-    const matchRequest = onSearch({
+    const matchRequest = onCompleteSpecies({
       composition: builderResolution.composition,
-      charge: builderResolution.totalCharge,
-      entityKind: builderResolution.entityKind,
       equationMode: draft.mode,
+      entityKind: 'substance',
       limit: 50,
     }, controller.signal)
     void Promise.resolve().then(() => {
@@ -366,7 +391,7 @@ export function EquationLabView({
       if (!controller.signal.aborted) setBuilderLoading(false)
     })
     return () => controller.abort()
-  }, [builderResolution, draft.mode, onSearch, paletteMode])
+  }, [builderResolution, draft.mode, onCompleteSpecies, paletteMode])
 
   const favoriteSpecies = useMemo(
     () => resolvePaletteSpecies(
@@ -450,6 +475,45 @@ export function EquationLabView({
     () => reactionCandidates.find((candidate) => candidate.consolidatedId === selectedReactionId) ?? null,
     [reactionCandidates, selectedReactionId],
   )
+
+  useEffect(() => {
+    if (!selectedReactionId || !onLoadReactionDetail) {
+      void Promise.resolve().then(() => {
+        setReactionDetail(null)
+        setReactionDetailLoading(false)
+        setReactionDetailError(null)
+      })
+      return
+    }
+    const controller = new AbortController()
+    void Promise.resolve().then(() => {
+      setReactionDetail(null)
+      setReactionDetailLoading(true)
+      setReactionDetailError(null)
+    })
+    void onLoadReactionDetail(selectedReactionId, controller.signal)
+      .then((detail) => {
+        if (!controller.signal.aborted) setReactionDetail(detail)
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return
+        if (!controller.signal.aborted) {
+          setReactionDetailError(reason instanceof Error ? reason.message : '反应知识加载失败')
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setReactionDetailLoading(false)
+      })
+    return () => controller.abort()
+  }, [onLoadReactionDetail, selectedReactionId])
+
+  const navigateToElement = useCallback(async (symbol: string) => {
+    if (!onNavigate) return
+    const elements = builderElements.length ? builderElements : await onLoadElements()
+    if (!builderElements.length) setBuilderElements(elements)
+    const element = elements.find((item) => item.symbol === symbol)
+    if (element) onNavigate(`/elements/${encodeURIComponent(element.id)}`)
+  }, [builderElements, onLoadElements, onNavigate])
 
   const invalidateBalance = useCallback(() => {
     balanceRequestId.current += 1
@@ -670,6 +734,9 @@ export function EquationLabView({
       <EquationWorkbench
         draft={draft}
         focusedReaction={focusedReaction}
+        reactionDetail={reactionDetail}
+        reactionDetailLoading={reactionDetailLoading}
+        reactionDetailError={reactionDetailError}
         result={result}
         error={error}
         loading={loading}
@@ -687,6 +754,8 @@ export function EquationLabView({
         onRedo={redo}
         onCopy={copyEquation}
         onManualInputToggle={() => setManualInputOpen((open) => !open)}
+        onNavigateToElement={(symbol) => { void navigateToElement(symbol) }}
+        onNavigateToStructure={(applicationId) => onNavigate?.(`/structure-lab?species=${encodeURIComponent(applicationId)}`)}
         onRemove={(side, id) => changeSide(side, (items) => items.filter((item) => item.applicationId !== id))}
         onPhase={(side, id, phase) => changeSide(side, (items) => updateParticipantPhase(items, id, phase))}
         onWorkbenchDragOver={handleWorkbenchDragOver}
@@ -936,12 +1005,12 @@ function SpeciesBuilder({
           </div>
         </div>
         <div className="builder-matches" aria-live="polite">
-          <strong>匹配结果</strong>
+          <strong>候选物质</strong>
           {!resolution ? <p>添加素材后显示结果。</p> : loading ? <p>匹配中…</p> : !matches.length ? (
             <p>未找到匹配物质</p>
           ) : (
             <>
-              <p>{matches.length === 1 ? '1 个匹配' : `${matches.length} 个匹配`}</p>
+              <p>{matches.length === 1 ? '1 个候选' : `${matches.length} 个候选`}</p>
               <div className="builder-match-list">
                 {matches.map((species) => (
                   <SpeciesBlock
@@ -987,12 +1056,15 @@ function BuilderBlockGroup({
   )
 }
 
-export default function EquationLab({ onBack, reactionId }: EquationLabProps) {
+export default function EquationLab({ onBack, onNavigate, reactionId }: EquationLabProps) {
   return (
     <EquationLabView
       onBack={onBack}
+      onNavigate={onNavigate}
       onBalance={balanceEquation}
       onFindCandidates={findReactionCandidates}
+      onCompleteSpecies={completeCatalogSpecies}
+      onLoadReactionDetail={loadReactionDetail}
       reactionId={reactionId}
     />
   )

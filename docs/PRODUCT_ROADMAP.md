@@ -23,6 +23,8 @@ The current product baseline is the working M00–M07 implementation on `main`, 
 - EquationDraft, phase, drag/reorder/move, Undo/Redo, copy, molecular/ionic/net-ionic balance;
 - consolidated `knowledge_catalog` application boundary;
 - known Reaction matching, direction/orientation, completion and deterministic ranking;
+- catalog-backed Builder composition completion and Reaction learning detail;
+- KaTeX + mhchem chemistry/equation display with Reaction → Element / Structure navigation;
 - Structure Lab with Ketcher, RDKit and 3Dmol.js;
 - FunctionalGroup detection;
 - compact Equation Lab species palette and Builder interaction.
@@ -81,7 +83,7 @@ Curated lists such as `hsiaoyi0504/awesome-cheminformatics` are discovery indexe
 | chemistry/structure computation | RDKit | integrated | keep as primary structure engine |
 | interactive small-molecule 3D | 3Dmol.js | integrated | keep |
 | local knowledge-graph rendering/layout | Cytoscape.js | integrated | Element Wiki interactive concentric graph |
-| standard chemistry/equation typesetting | KaTeX + mhchem | planned | integrate in Reaction experience |
+| standard chemistry/equation typesetting | KaTeX + mhchem | integrated | narrow display adapter; canonical DTOs remain truth |
 
 ### Evaluate before custom chemistry computation
 
@@ -164,22 +166,29 @@ Learner-facing UI uses chemistry, actions and meaningful state. Milestone IDs, d
 - desktop and narrow mobile layouts remain usable;
 - README and affected handoffs match the implemented state.
 
-## Phase 2 — Reaction experience
+## Phase 2A — Reaction experience foundation（已实现）
 
 **Goal:** turn Equation Lab from a balance/editor surface into a connected reaction-learning surface.
 
-Planned product work:
+Implemented product work:
 
 - Builder composition completion backed by `knowledge_catalog`, not exact-ion echo;
-- implicit magnetic drop zones;
-- Edit ↔ Settled equation states;
 - KaTeX + mhchem standard equation rendering;
 - visible canonical reaction conditions, phenomena, type and concepts;
 - navigation from a reaction to related species, elements and available structures.
 
-Before extending calculation responsibilities beyond the stable M05 core, evaluate ChemPy against the exact gap. Reuse it only where it removes meaningful custom chemistry computation and can live behind a narrow backend adapter.
+`knowledge_catalog` owns the durable learner-facing source-attribution projection imported from the pinned reviewed release. The application does not expose internal source IDs or require the external data checkout at request time.
 
-M05 EquationDraft remains the interaction/history anchor. Canonical Reaction completion remains a projection rather than a second draft owner.
+M05 EquationDraft remains the interaction/history anchor. Canonical Reaction completion and learning detail remain read projections rather than a second draft owner.
+
+## Phase 2B — Reaction interaction refinement（计划）
+
+Planned product work:
+
+- implicit magnetic drop zones;
+- Edit ↔ Settled equation states.
+
+Before extending calculation responsibilities beyond the stable M05 core, evaluate ChemPy against the exact gap. Reuse it only where it removes meaningful custom chemistry computation and can live behind a narrow backend adapter.
 
 ## Phase 3 — Structure experience
 

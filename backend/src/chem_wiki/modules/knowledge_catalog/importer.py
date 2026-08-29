@@ -38,6 +38,7 @@ from .persistence import (
     CatalogReactionRow,
     CatalogReleaseArtifactRow,
     CatalogReleaseRow,
+    CatalogSourceAttributionRow,
     CatalogSourceCrosswalkRow,
     CatalogSpeciesRow,
     CatalogStructureLinkRow,
@@ -63,6 +64,7 @@ class KnowledgeCatalogImportResult:
     catalog_only_reactions: int
     knowledge_records_imported: int
     structure_records_imported: int
+    source_attributions_imported: int
 
 
 def _load_jsonl(release: VerifiedRelease, name: str) -> list[dict[str, Any]]:
@@ -167,6 +169,37 @@ def _import_crosswalks(session: Session, records: list[dict[str, Any]]) -> None:
                     notes=record.get("notes"),
                 )
             )
+
+
+def _import_source_attributions(session: Session, release: VerifiedRelease) -> int:
+    registry_path = (
+        release.source_root / "packages" / "inorganic" / "sources" / "source_registry.json"
+    )
+    if not registry_path.is_file():
+        raise ValueError("pinned inorganic package 缺少 source registry")
+    payload = json.loads(registry_path.read_text(encoding="utf-8"))
+    sources = payload.get("sources")
+    if not isinstance(sources, list):
+        raise TypeError("pinned inorganic source registry 格式无效")
+    imported = 0
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        source_id = source.get("id")
+        name = source.get("name")
+        if not isinstance(source_id, str) or not isinstance(name, str):
+            continue
+        source_ref = f"inorganic:{source_id}"
+        if session.get(CatalogSourceAttributionRow, source_ref) is None:
+            session.add(
+                CatalogSourceAttributionRow(
+                    source_ref=source_ref,
+                    name=name,
+                    url=source.get("url") if isinstance(source.get("url"), str) else None,
+                )
+            )
+        imported += 1
+    return imported
 
 
 def _import_teaching_projections(session: Session, records: list[dict[str, Any]]) -> None:
@@ -468,6 +501,7 @@ def import_consolidated_release(
     knowledge_records = _load_jsonl(release, "knowledge_records.jsonl")
 
     _store_release(session, release)
+    source_attribution_count = _import_source_attributions(session, release)
     species = _import_species(session, species_records)
     _import_crosswalks(session, crosswalk_records)
     _import_teaching_projections(session, teaching_records)
@@ -487,4 +521,5 @@ def import_consolidated_release(
         catalog_only_reactions=catalog_only,
         knowledge_records_imported=knowledge_record_count,
         structure_records_imported=structure_record_count,
+        source_attributions_imported=source_attribution_count,
     )

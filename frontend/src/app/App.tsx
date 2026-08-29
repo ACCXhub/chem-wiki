@@ -34,7 +34,13 @@ function App() {
   const pathname = location.pathname
   const elementId = elementIdFromPath(pathname)
   if (pathname === '/equation-lab') {
-    return <EquationLab onBack={() => navigate('/')} reactionId={location.searchParams.get('reaction')} />
+    return (
+      <EquationLab
+        onBack={() => navigate('/')}
+        onNavigate={navigate}
+        reactionId={location.searchParams.get('reaction')}
+      />
+    )
   }
   if (pathname === '/structure-lab') {
     return (

@@ -2,7 +2,12 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, expect, test, vi } from 'vitest'
 
 import { EquationLabView } from './EquationLab'
-import type { BalanceEquationResponse, CatalogSpecies, ReactionCandidate } from './types'
+import type {
+  BalanceEquationResponse,
+  CatalogReactionDetail,
+  CatalogSpecies,
+  ReactionCandidate,
+} from './types'
 import type { PeriodicTableElement } from '../periodic_table'
 
 
@@ -137,7 +142,10 @@ test('drags H2 and O2 into reactants and H2O into products, then auto-balances',
 
   await waitFor(() => expect(onBalance).toHaveBeenCalledWith('H2 + O2 -> H2O', 'molecular'))
   await screen.findByText('输入未配平，已求得最简整数比')
-  expect(screen.getByLabelText('结构化方程式草稿')).toHaveTextContent('2H₂氢气+O₂氧气+＋→2H₂O水+＋')
+  const composer = within(screen.getByLabelText('结构化方程式草稿'))
+  expect(composer.getByLabelText('2 H2')).toBeInTheDocument()
+  expect(composer.getByLabelText('O2')).toBeInTheDocument()
+  expect(composer.getByLabelText('2 H2O')).toBeInTheDocument()
   expect(screen.getByLabelText('反应物空槽位')).toBeInTheDocument()
   expect(screen.getByLabelText('生成物空槽位')).toBeInTheDocument()
   expect(screen.getByText('输入未配平，已求得最简整数比')).toBeInTheDocument()
@@ -196,8 +204,10 @@ test('combines catalog search and category with the current equation mode', asyn
     equationMode: 'ionic',
     limit: 50,
   }, expect.any(AbortSignal)))
-  const notation = document.querySelector('.species-block.kind-ion .chem-notation')
-  expect(notation).toHaveTextContent('SO₄2-')
+  expect(document.querySelector('.species-block.kind-ion .chem-notation')).toHaveAttribute(
+    'aria-label',
+    'SO4^{2-}',
+  )
 })
 
 test('preserves invalid errors and the approved no-net-ionic result in direct input', async () => {
@@ -291,7 +301,7 @@ test('does not let an older automatic balance response replace a newer draft', a
   expect(document.querySelector('.participant-coefficient')).not.toBeInTheDocument()
   await waitFor(() => expect(onBalance).toHaveBeenCalledWith('H2(g) + O2 -> H2O', 'molecular'))
   resolveSecond(result)
-  await waitFor(() => expect(screen.getByLabelText('结构化方程式草稿')).toHaveTextContent('2H₂'))
+  await waitFor(() => expect(screen.getByLabelText('2 H2(g)')).toBeInTheDocument())
 })
 
 test('narrows candidates with both equation sides and auto-focuses a unique reaction', async () => {
@@ -339,6 +349,62 @@ test('manually promotes an alternative candidate to the stable cluster center', 
   expect(screen.getByLabelText('过氧化氢，由当前反应补全')).toBeInTheDocument()
 })
 
+test('shows reviewed reaction learning detail and navigates to element and structure flows', async () => {
+  const candidate = reactionCandidate('reaction:water', '水的生成', molecularCatalog[2])
+  const detail: CatalogReactionDetail = {
+    ...candidate,
+    concepts: [{
+      consolidatedId: 'concept:conservation',
+      applicationId: 'concept-conservation',
+      sourceType: 'concept',
+      displayNameZh: '反应守恒',
+      teachingPriority: 'core',
+      contentZh: '反应前后元素种类与原子数保持不变。',
+      relatedReactionIds: ['reaction:water'],
+      relatedSpeciesIds: [],
+    }],
+    phenomena: [{
+      consolidatedId: 'phenomenon:flame',
+      applicationId: 'phenomenon-flame',
+      sourceType: 'phenomenon',
+      displayNameZh: '氢气燃烧',
+      teachingPriority: 'core',
+      contentZh: '发出淡蓝色火焰。',
+      relatedReactionIds: ['reaction:water'],
+      relatedSpeciesIds: [],
+    }],
+    relatedSpecies: [{ ...molecularCatalog[2], structureAvailable: true }],
+    sources: [{ name: '普通高中化学课程标准', url: 'https://example.test/source' }],
+  }
+  const onNavigate = vi.fn()
+  render(
+    <EquationLabView
+      onBack={() => undefined}
+      onNavigate={onNavigate}
+      onBalance={() => Promise.resolve(result)}
+      onSearch={() => Promise.resolve(molecularCatalog)}
+      onFindCandidates={() => Promise.resolve([candidate])}
+      onLoadReactionDetail={() => Promise.resolve(detail)}
+      onLoadElements={() => Promise.resolve([{ id: 'element-h', symbol: 'H' } as PeriodicTableElement])}
+    />,
+  )
+
+  await screen.findByText('氢气')
+  addMaterial('氢气', 'reactants')
+  expect(await screen.findByText('现象 · 氢气燃烧')).toBeInTheDocument()
+  expect(screen.getByText('概念 · 反应守恒')).toBeInTheDocument()
+  fireEvent.click(screen.getByText('来源'))
+  expect(screen.getByRole('link', { name: '普通高中化学课程标准' })).toHaveAttribute(
+    'href',
+    'https://example.test/source',
+  )
+  fireEvent.click(screen.getByText('相关物质 · 1'))
+  fireEvent.click(screen.getByRole('button', { name: 'H 元素' }))
+  await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('/elements/element-h'))
+  fireEvent.click(screen.getByRole('button', { name: '查看结构' }))
+  expect(onNavigate).toHaveBeenCalledWith('/structure-lab?species=h2o')
+})
+
 test('keeps direct catalog selection primary while exposing the controlled builder', async () => {
   render(
     <EquationLabView
@@ -358,17 +424,18 @@ test('resolves controlled sodium and sulfate blocks to the existing catalog spec
   const sodium = { ...species('sodium', '钠离子', 'Na', 1), composition: { Na: 1 } }
   const sulfate = { ...species('sulfate', '硫酸根离子', 'SO4', -2), composition: { S: 1, O: 4 } }
   const sodiumSulfate = { ...species('sodium-sulfate', '硫酸钠', 'Na2SO4'), composition: { Na: 2, S: 1, O: 4 } }
-  const onSearch = vi.fn((request: { primaryCategory?: string; composition?: Record<string, number> }) => {
+  const onSearch = vi.fn((request: { primaryCategory?: string }) => {
     if (request.primaryCategory === 'cation') return Promise.resolve([sodium])
     if (request.primaryCategory === 'anion') return Promise.resolve([sulfate])
-    if (request.composition) return Promise.resolve([sodiumSulfate])
     return Promise.resolve(molecularCatalog)
   })
+  const onCompleteSpecies = vi.fn(() => Promise.resolve([sodiumSulfate]))
   render(
     <EquationLabView
       onBack={() => undefined}
       onBalance={() => Promise.resolve(result)}
       onSearch={onSearch}
+      onCompleteSpecies={onCompleteSpecies}
       onLoadElements={() => Promise.resolve([])}
     />,
   )
@@ -381,10 +448,9 @@ test('resolves controlled sodium and sulfate blocks to the existing catalog spec
   fireEvent.click(screen.getByRole('button', { name: '阴离子' }))
   fireEvent.click(screen.getByRole('button', { name: '添加硫酸根离子' }))
 
-  expect(await screen.findByText('1 个匹配')).toBeInTheDocument()
-  await waitFor(() => expect(onSearch).toHaveBeenLastCalledWith({
+  expect(await screen.findByText('1 个候选')).toBeInTheDocument()
+  await waitFor(() => expect(onCompleteSpecies).toHaveBeenLastCalledWith({
     composition: { Na: 2, O: 4, S: 1 },
-    charge: 0,
     entityKind: 'substance',
     equationMode: 'molecular',
     limit: 50,
@@ -405,16 +471,16 @@ test('shows multiple and no controlled composition matches without synthesizing 
   const hydrogen = { ...carbon, id: 'hydrogen', atomicNumber: 1, symbol: 'H', nameZh: '氢', nameEn: 'hydrogen' }
   const buteneOne = { ...species('butene-1', '1-丁烯', 'C4H8'), composition: { C: 4, H: 8 } }
   const buteneTwo = { ...species('butene-2', '顺-2-丁烯', 'C4H8'), composition: { C: 4, H: 8 } }
-  const onSearch = vi.fn((request: { composition?: Record<string, number> }) => {
+  const onCompleteSpecies = vi.fn((request: { composition: Record<string, number> }) => {
     if (request.composition?.C === 4 && request.composition.H === 8) return Promise.resolve([buteneOne, buteneTwo])
-    if (request.composition) return Promise.resolve([])
-    return Promise.resolve(molecularCatalog)
+    return Promise.resolve([])
   })
   render(
     <EquationLabView
       onBack={() => undefined}
       onBalance={() => Promise.resolve(result)}
-      onSearch={onSearch}
+      onSearch={() => Promise.resolve(molecularCatalog)}
+      onCompleteSpecies={onCompleteSpecies}
       onLoadElements={() => Promise.resolve([carbon, hydrogen])}
     />,
   )
@@ -425,7 +491,7 @@ test('shows multiple and no controlled composition matches without synthesizing 
   expect(await screen.findByRole('button', { name: '添加碳' })).toBeInTheDocument()
   for (let count = 0; count < 4; count += 1) fireEvent.click(screen.getByRole('button', { name: '添加碳' }))
   for (let count = 0; count < 8; count += 1) fireEvent.click(screen.getByRole('button', { name: '添加氢' }))
-  expect(await screen.findByText('2 个匹配')).toBeInTheDocument()
+  expect(await screen.findByText('2 个候选')).toBeInTheDocument()
   expect(screen.getByText('1-丁烯')).toBeInTheDocument()
   expect(screen.getByText('顺-2-丁烯')).toBeInTheDocument()
 
@@ -476,7 +542,7 @@ test('toggles palette Chinese names immediately and persists the display prefere
   )
   await screen.findByText('氢气')
   fireEvent.click(screen.getByRole('button', { name: '隐藏中文名' }))
-  expect(material('氢气')).toHaveTextContent('H₂')
+  expect(within(material('氢气')).getByLabelText('H2')).toBeInTheDocument()
   expect(material('氢气')).not.toHaveTextContent('氢气')
   first.unmount()
 

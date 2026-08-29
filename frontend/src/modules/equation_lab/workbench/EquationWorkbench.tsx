@@ -1,8 +1,9 @@
 import { useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react'
 
-import ChemistryNotation from '../ChemistryNotation'
+import ChemistryNotation, { ChemistryEquation } from '../ChemistryNotation'
 import type {
   BalanceEquationResponse,
+  CatalogReactionDetail,
   EquationDraft,
   EquationDraftParticipant,
   EquationMode,
@@ -23,6 +24,9 @@ const MODE_LABELS: Record<EquationMode, string> = {
 interface EquationWorkbenchProps {
   draft: EquationDraft
   focusedReaction: ReactionCandidate | null
+  reactionDetail: CatalogReactionDetail | null
+  reactionDetailLoading: boolean
+  reactionDetailError: string | null
   result: BalanceEquationResponse | null
   error: string | null
   loading: boolean
@@ -40,6 +44,8 @@ interface EquationWorkbenchProps {
   onRedo: () => void
   onCopy: () => Promise<void>
   onManualInputToggle: () => void
+  onNavigateToElement: (symbol: string) => void
+  onNavigateToStructure: (applicationId: string) => void
   onRemove: (side: DraftSide, applicationId: string) => void
   onPhase: (side: DraftSide, applicationId: string, phase: EquationPhase | null) => void
   onWorkbenchDragOver: (event: DragEvent<HTMLElement>) => void
@@ -65,6 +71,9 @@ interface DisplayParticipant {
 export default function EquationWorkbench({
   draft,
   focusedReaction,
+  reactionDetail,
+  reactionDetailLoading,
+  reactionDetailError,
   result,
   error,
   loading,
@@ -82,6 +91,8 @@ export default function EquationWorkbench({
   onRedo,
   onCopy,
   onManualInputToggle,
+  onNavigateToElement,
+  onNavigateToStructure,
   onRemove,
   onPhase,
   onWorkbenchDragOver,
@@ -136,7 +147,16 @@ export default function EquationWorkbench({
         <DraftSideLine side="products" participants={products} dragTarget={dragTarget} duplicatePulse={duplicatePulse} onRemove={onRemove} onPhase={onPhase} onParticipantDragOver={onParticipantDragOver} onParticipantDragStart={onParticipantDragStart} onDrop={onDrop} onDragEnd={onDragEnd} />
       </div>
 
-      {focusedReaction ? <FocusedReactionKnowledge reaction={focusedReaction} /> : null}
+      {focusedReaction ? (
+        <FocusedReactionKnowledge
+          reaction={focusedReaction}
+          detail={reactionDetail}
+          loading={reactionDetailLoading}
+          error={reactionDetailError}
+          onNavigateToElement={onNavigateToElement}
+          onNavigateToStructure={onNavigateToStructure}
+        />
+      ) : null}
       {error ? <div className="lab-error compact" role="alert"><strong>无法配平</strong><span>{error}</span></div> : null}
       {result ? <EquationResultDetails result={result} /> : null}
 
@@ -301,8 +321,7 @@ function ParticipantBlock({ participant, side, index, isDropTarget, isPulsing, o
   const gestureLabel = isAnchor ? '点击编辑物态，双击移除' : '由当前反应补全'
   return (
     <div className={`draft-participant kind-${participant.entityKind ?? 'reference'} source-${participant.source} ${isDropTarget ? 'is-drop-target' : ''} ${isPulsing ? 'is-pulsing' : ''}`} draggable={isAnchor} tabIndex={isAnchor ? 0 : undefined} onClick={deferPhase} onDoubleClick={handleDoubleClick} onKeyDown={handleKeyDown} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragOver={(event) => { event.stopPropagation(); onDragOver(event, { side, index }) }} onDrop={(event) => { event.stopPropagation(); onDrop(event, { side, index }) }} aria-label={`${participant.nameZh}，${gestureLabel}`}>
-      {participant.coefficient !== null && String(participant.coefficient) !== '1' ? <strong className="participant-coefficient">{participant.coefficient}</strong> : null}
-      <ChemistryNotation formula={participant.formula} charge={participant.charge} phase={participant.phase} />
+      <ChemistryNotation formula={participant.formula} charge={participant.charge} phase={participant.phase} coefficient={participant.coefficient ?? undefined} />
       <span>{participant.nameZh}</span>
       {phaseOpen && participant.applicationId ? <div className="phase-selector" role="group" aria-label={`${participant.nameZh}的物态`} onClick={(event) => event.stopPropagation()}>
         {([null, 's', 'l', 'g', 'aq'] as Array<EquationPhase | null>).map((phase) => <button key={phase ?? 'none'} type="button" aria-pressed={participant.phase === phase} onClick={() => { onPhase(side, participant.applicationId as string, phase); setPhaseOpen(false) }}>{phase ? `(${phase})` : '—'}</button>)}
@@ -311,14 +330,79 @@ function ParticipantBlock({ participant, side, index, isDropTarget, isPulsing, o
   )
 }
 
-function FocusedReactionKnowledge({ reaction }: { reaction: ReactionCandidate }) {
-  const hasSource = reaction.provenanceRefs.length > 0 || reaction.sourcePackage || reaction.sourceId
+function FocusedReactionKnowledge({
+  reaction,
+  detail,
+  loading,
+  error,
+  onNavigateToElement,
+  onNavigateToStructure,
+}: {
+  reaction: ReactionCandidate
+  detail: CatalogReactionDetail | null
+  loading: boolean
+  error: string | null
+  onNavigateToElement: (symbol: string) => void
+  onNavigateToStructure: (applicationId: string) => void
+}) {
+  const reactionTypes = detail?.reactionTypes ?? reaction.reactionTypes
+  const conditions = detail?.conditions ?? reaction.conditions
   return (
     <section className="focused-reaction-knowledge" aria-label="当前反应">
-      <div className="focused-reaction-title"><span>当前反应</span><strong>{reaction.nameZh}</strong></div>
-      {reaction.reactionTypes.length ? <p><span>反应类型</span>{reaction.reactionTypes.join(' · ')}</p> : null}
-      {reaction.conditions.length ? <p><span>反应条件</span>{reaction.conditions.join(' · ')}</p> : null}
-      {hasSource ? <details><summary>来源</summary><p>{reaction.provenanceRefs.length ? reaction.provenanceRefs.join(' · ') : `${reaction.sourcePackage}:${reaction.sourceId}`}</p></details> : null}
+      <div className="focused-reaction-summary">
+        <div className="focused-reaction-title"><span>当前反应</span><strong>{reaction.nameZh}</strong></div>
+        {detail?.equation ? <ChemistryEquation expression={detail.equation} /> : null}
+        {reactionTypes.length ? <p><span>反应类型</span>{reactionTypes.join(' · ')}</p> : null}
+        {conditions.length ? <p><span>反应条件</span>{conditions.join(' · ')}</p> : null}
+      </div>
+      {loading ? <span className="reaction-detail-state">正在加载反应知识…</span> : null}
+      {error ? <span className="reaction-detail-state is-error">{error}</span> : null}
+      {detail ? (
+        <div className="reaction-learning-detail">
+          {detail.phenomena.map((item) => (
+            <details key={item.consolidatedId} className="reaction-learning-item">
+              <summary>现象 · {item.displayNameZh}</summary>
+              <p>{item.contentZh}</p>
+            </details>
+          ))}
+          {detail.concepts.map((item) => (
+            <details key={item.consolidatedId} className="reaction-learning-item">
+              <summary>概念 · {item.displayNameZh}</summary>
+              <p>{item.contentZh}</p>
+            </details>
+          ))}
+          {detail.relatedSpecies.length ? (
+            <details className="reaction-related-species">
+              <summary>相关物质 · {detail.relatedSpecies.length}</summary>
+              <div className="reaction-species-list">
+                {detail.relatedSpecies.map((species) => (
+                  <div className="reaction-species-item" key={species.applicationId}>
+                    <span><ChemistryNotation formula={species.formula} charge={species.charge} /><strong>{species.nameZh}</strong></span>
+                    <div>
+                      {Object.keys(species.composition ?? {}).map((symbol) => (
+                        <button key={symbol} type="button" onClick={() => onNavigateToElement(symbol)}>{symbol} 元素</button>
+                      ))}
+                      {species.structureAvailable ? (
+                        <button type="button" onClick={() => onNavigateToStructure(species.applicationId)}>查看结构</button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+          {detail.sources.length ? (
+            <details className="reaction-sources">
+              <summary>来源</summary>
+              <ul>{detail.sources.map((source) => (
+                <li key={`${source.name}:${source.url ?? ''}`}>
+                  {source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.name}</a> : source.name}
+                </li>
+              ))}</ul>
+            </details>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   )
 }

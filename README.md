@@ -16,6 +16,8 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
 - 分子方程式、离子方程式、净离子方程式配平；
 - consolidated `knowledge_catalog`；
 - 已知 Reaction 候选匹配、方向/可逆方向、补全与稳定排序；
+- Builder composition completion，以及 Reaction 的类型、条件、审核概念/现象、相关物质与可读来源详情；
+- KaTeX + mhchem 标准化学式/方程显示，并支持 Reaction → Element / Structure 连续导航；
 - catalog 物质直接进入 Structure Lab；
 - Ketcher 分子绘制；
 - RDKit 结构解析、描述符、2D/3D 数据生成与官能团识别；
@@ -81,11 +83,6 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
 | 化学结构计算与解析 | RDKit |
 | 小分子交互式 3D | 3Dmol.js |
 | Element Wiki 局部知识图 | Cytoscape.js |
-
-后续阶段计划集成：
-
-| 能力 | 项目 |
-| --- | --- |
 | 标准化学式 / 方程排版 | KaTeX + mhchem |
 
 新增化学计算能力前优先评估成熟生态，而不是继续自研底层算法。当前重点候选包括 ChemPy（无机/物化计算、平衡与动力学）、ChEMBL Structure Pipeline（结构标准化）、OPSIN（系统命名转结构）；Open Babel 只作为 RDKit 格式覆盖不足时的备选。CGRtools 可作为未来 reaction graph 设计参考，但当前不列为计划依赖。完整边界与选型状态见 [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md)。

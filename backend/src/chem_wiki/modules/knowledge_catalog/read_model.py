@@ -84,3 +84,19 @@ class CatalogStructureEntry(CatalogDto):
     isomeric_smiles: str | None
     molecular_formula: str | None
     formal_charge: int | None
+
+
+class CatalogRelatedSpeciesResult(CatalogSpeciesResult):
+    structure_available: bool
+
+
+class CatalogSourceAttributionResult(CatalogDto):
+    name: str
+    url: str | None
+
+
+class CatalogReactionDetail(CatalogReactionResult):
+    concepts: list[CatalogKnowledgeResult]
+    phenomena: list[CatalogKnowledgeResult]
+    related_species: list[CatalogRelatedSpeciesResult]
+    sources: list[CatalogSourceAttributionResult]

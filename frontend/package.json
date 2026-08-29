@@ -13,6 +13,7 @@
   "dependencies": {
     "3dmol": "^2.5.5",
     "cytoscape": "^3.34.2",
+    "katex": "^0.18.4",
     "ketcher-core": "^3.17.2",
     "ketcher-react": "^3.17.2",
     "ketcher-standalone": "^3.15.0",

@@ -19,6 +19,7 @@ from chem_wiki.modules.knowledge_catalog import (
     CatalogKnowledgeRecordRow,
     CatalogReactionParticipantRow,
     CatalogReactionRow,
+    CatalogSourceAttributionRow,
     CatalogSourceCrosswalkRow,
     CatalogSpeciesRow,
     CatalogStructureLinkRow,
@@ -83,8 +84,10 @@ def test_release_import_is_complete_idempotent_and_queryable(
         assert first.catalog_only_reactions == 8
         assert first.knowledge_records_imported == 127
         assert first.structure_records_imported == 69
+        assert first.source_attributions_imported == 7
         assert _count(session, CatalogSpeciesRow) == 309
         assert _count(session, CatalogSourceCrosswalkRow) == 309
+        assert _count(session, CatalogSourceAttributionRow) == 7
         assert _count(session, CatalogTeachingProjectionRow) == 309
         assert _count(session, CatalogStructureLinkRow) == 69
         assert _count(session, CatalogStructureRecordRow) == 69
@@ -188,6 +191,30 @@ def test_release_import_is_complete_idempotent_and_queryable(
         assert len(reader.search_species(query="Fe", limit=1)) == 1
         assert len(reader.search_species(query="Fe", limit=20)) > 1
 
+        strontium_completions = reader.complete_species(composition={"Sr": 1}, limit=20)
+        assert len(strontium_completions) > 1
+        assert all(item.entity_kind == "substance" for item in strontium_completions)
+        assert all(item.composition and "Sr" in item.composition for item in strontium_completions)
+        assert reader.complete_species(
+            composition={"Sr": 1, "S": 1, "O": 4}, limit=20
+        )[0].formula == "SrSO4"
+        assert reader.complete_species(
+            composition={"Na": 2, "S": 1, "O": 4}, limit=20
+        )[0].formula == "Na2SO4"
+        assert reader.complete_species(composition={"Xe": 99}, limit=20) == []
+
+        detail = reader.get_reaction_detail("reaction:inorganic:reaction:agno3-nacl")
+        assert detail is not None
+        assert detail.concepts
+        assert detail.phenomena
+        assert detail.related_species
+        assert any(
+            item.display_name_zh == "氯化银沉淀" and item.content_zh == "生成白色沉淀。"
+            for item in detail.phenomena
+        )
+        assert any(item.url and "moe.gov.cn" in item.url for item in detail.sources)
+        assert all("src:" not in item.name for item in detail.sources)
+
         catalog_reaction = reader.get_reaction(phenol_resin.consolidated_id)
         assert catalog_reaction is not None
         assert catalog_reaction.materialization_state == "catalog_only"
@@ -225,8 +252,25 @@ def test_release_import_is_complete_idempotent_and_queryable(
         assert payload[0]["entityKind"] == "ion"
         assert UUID(payload[0]["applicationId"])
 
+        completion_response = TestClient(create_app()).get(
+            "/v1/catalog/species/completions",
+            params={"composition": '{"Sr":1,"S":1,"O":4}', "limit": 20},
+        )
+        assert completion_response.status_code == 200
+        assert completion_response.json()[0]["formula"] == "SrSO4"
+
         reaction_response = TestClient(create_app()).get(
             f"/v1/catalog/reactions/{phenol_resin.consolidated_id}"
         )
         assert reaction_response.status_code == 200
         assert reaction_response.json()["materializationState"] == "catalog_only"
+
+        detail_response = TestClient(create_app()).get(
+            "/v1/catalog/reactions/reaction:inorganic:reaction:agno3-nacl/detail"
+        )
+        assert detail_response.status_code == 200
+        detail_payload = detail_response.json()
+        assert detail_payload["concepts"]
+        assert detail_payload["phenomena"]
+        assert detail_payload["relatedSpecies"]
+        assert detail_payload["sources"]

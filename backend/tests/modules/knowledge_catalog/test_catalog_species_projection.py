@@ -39,12 +39,12 @@ def _species(
     )
 
 
-def _projection() -> SimpleNamespace:
+def _projection(*, rank: int = 1, priority: str = "core") -> SimpleNamespace:
     return SimpleNamespace(
         primary_category="salt",
         tags=[],
-        default_priority="core",
-        default_palette_rank=1,
+        default_priority=priority,
+        default_palette_rank=rank,
         molecular_suitability="recommended",
         ionic_suitability="available",
         net_ionic_suitability="available",
@@ -161,3 +161,113 @@ def test_catalog_reader_hydrates_exact_application_ids_without_normal_search_ran
     )
 
     assert [match.application_id for match in matches] == [long_tail.application_id]
+
+
+def test_catalog_completion_returns_strontium_substances_instead_of_exact_ion_echo() -> None:
+    strontium = _species(
+        consolidated_id="species:strontium",
+        formula="Sr",
+        charge=0,
+        entity_kind="substance",
+        composition={"Sr": 1},
+        classifications=["elemental_substance"],
+    )
+    strontium_chloride = _species(
+        consolidated_id="species:strontium-chloride",
+        formula="SrCl2",
+        charge=0,
+        entity_kind="substance",
+        composition={"Sr": 1, "Cl": 2},
+        classifications=["salt"],
+    )
+    strontium_ion = _species(
+        consolidated_id="species:strontium-ion",
+        formula="Sr",
+        charge=2,
+        entity_kind="ion",
+        composition={"Sr": 1},
+        classifications=[],
+    )
+    reader = PostgresCatalogReader(
+        SessionStub(
+            [
+                (strontium_chloride, _projection(rank=4)),
+                (strontium_ion, _projection(rank=2)),
+                (strontium, _projection(rank=3)),
+            ]
+        )
+    )
+
+    matches = reader.complete_species(composition={"Sr": 1}, limit=10)
+
+    assert [match.formula for match in matches] == ["Sr", "SrCl2"]
+    assert all(match.entity_kind == "substance" for match in matches)
+
+
+def test_catalog_completion_ranks_exact_strontium_and_sodium_sulfates_first() -> None:
+    candidates = [
+        _species(
+            consolidated_id="species:strontium-sulfate",
+            formula="SrSO4",
+            charge=0,
+            entity_kind="substance",
+            composition={"Sr": 1, "S": 1, "O": 4},
+            classifications=["salt"],
+        ),
+        _species(
+            consolidated_id="species:strontium-sulfite",
+            formula="SrSO3",
+            charge=0,
+            entity_kind="substance",
+            composition={"Sr": 1, "S": 1, "O": 3},
+            classifications=["salt"],
+        ),
+        _species(
+            consolidated_id="species:sodium-sulfate",
+            formula="Na2SO4",
+            charge=0,
+            entity_kind="substance",
+            composition={"Na": 2, "S": 1, "O": 4},
+            classifications=["salt"],
+        ),
+        _species(
+            consolidated_id="species:sodium-hydrogen-sulfate",
+            formula="NaHSO4",
+            charge=0,
+            entity_kind="substance",
+            composition={"Na": 1, "H": 1, "S": 1, "O": 4},
+            classifications=["salt"],
+        ),
+    ]
+    reader = PostgresCatalogReader(
+        SessionStub([(candidate, _projection(rank=index)) for index, candidate in enumerate(candidates)])
+    )
+
+    assert reader.complete_species(
+        composition={"Sr": 1, "S": 1, "O": 4}, limit=10
+    )[0].formula == "SrSO4"
+    assert reader.complete_species(
+        composition={"Na": 2, "S": 1, "O": 4}, limit=10
+    )[0].formula == "Na2SO4"
+
+
+def test_catalog_completion_has_explicit_empty_and_deterministic_tie_breaks() -> None:
+    candidates = [
+        _species(
+            consolidated_id=consolidated_id,
+            formula="SrX",
+            charge=0,
+            entity_kind="substance",
+            composition={"Sr": 1, "X": 1},
+            classifications=[],
+        )
+        for consolidated_id in ["species:zeta", "species:alpha"]
+    ]
+    reader = PostgresCatalogReader(
+        SessionStub([(candidate, _projection(rank=1)) for candidate in candidates])
+    )
+
+    assert [item.consolidated_id for item in reader.complete_species(
+        composition={"Sr": 1}, limit=10
+    )] == ["species:alpha", "species:zeta"]
+    assert reader.complete_species(composition={"Xe": 2}, limit=10) == []

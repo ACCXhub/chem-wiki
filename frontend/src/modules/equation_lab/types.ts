@@ -79,6 +79,33 @@ export interface CatalogReactionEntry {
   sourceId: string
 }
 
+export interface CatalogReactionKnowledge {
+  consolidatedId: string
+  applicationId: string
+  sourceType: 'concept' | 'phenomenon'
+  displayNameZh: string
+  teachingPriority: string
+  contentZh: string
+  relatedReactionIds: string[]
+  relatedSpeciesIds: string[]
+}
+
+export interface CatalogRelatedSpecies extends CatalogSpecies {
+  structureAvailable: boolean
+}
+
+export interface CatalogSourceAttribution {
+  name: string
+  url: string | null
+}
+
+export interface CatalogReactionDetail extends CatalogReactionEntry {
+  concepts: CatalogReactionKnowledge[]
+  phenomena: CatalogReactionKnowledge[]
+  relatedSpecies: CatalogRelatedSpecies[]
+  sources: CatalogSourceAttribution[]
+}
+
 export interface ReactionCandidateQuery {
   reactantApplicationIds: string[]
   productApplicationIds: string[]
@@ -91,6 +118,13 @@ export interface CatalogSpeciesQuery {
   equationMode: EquationMode
   composition?: Record<string, number>
   charge?: number
+  entityKind?: 'ion' | 'substance'
+  limit?: number
+}
+
+export interface CatalogCompletionQuery {
+  composition: Record<string, number>
+  equationMode?: EquationMode
   entityKind?: 'ion' | 'substance'
   limit?: number
 }

@@ -1,6 +1,8 @@
 import type {
   BalanceEquationResponse,
   CatalogSpecies,
+  CatalogCompletionQuery,
+  CatalogReactionDetail,
   CatalogSpeciesQuery,
   EquationMode,
   ReactionCandidate,
@@ -11,6 +13,27 @@ import type {
 
 interface ErrorPayload {
   detail?: { message?: string } | string
+}
+
+export async function completeCatalogSpecies(
+  query: CatalogCompletionQuery,
+  signal?: AbortSignal,
+): Promise<CatalogSpecies[]> {
+  const parameters = new URLSearchParams({
+    composition: JSON.stringify(query.composition),
+    entity_kind: query.entityKind ?? 'substance',
+    limit: String(query.limit ?? 50),
+  })
+  if (query.equationMode) parameters.set('equation_mode', query.equationMode)
+  const response = await fetch(`/v1/catalog/species/completions?${parameters}`, {
+    headers: { Accept: 'application/json' },
+    signal,
+  })
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as ErrorPayload | null
+    throw apiError(payload, response.status, '候选物质加载失败')
+  }
+  return (await response.json()) as CatalogSpecies[]
 }
 
 function apiError(payload: ErrorPayload | null, status: number, fallback: string): Error {
@@ -97,4 +120,19 @@ export async function loadCatalogReaction(
     throw apiError(payload, response.status, '反应加载失败')
   }
   return (await response.json()) as CatalogReactionEntry
+}
+
+export async function loadReactionDetail(
+  consolidatedId: string,
+  signal?: AbortSignal,
+): Promise<CatalogReactionDetail> {
+  const response = await fetch(
+    `/v1/catalog/reactions/${encodeURIComponent(consolidatedId)}/detail`,
+    { headers: { Accept: 'application/json' }, signal },
+  )
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as ErrorPayload | null
+    throw apiError(payload, response.status, '反应知识加载失败')
+  }
+  return (await response.json()) as CatalogReactionDetail
 }

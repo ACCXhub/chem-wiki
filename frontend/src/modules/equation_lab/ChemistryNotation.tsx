@@ -1,28 +1,30 @@
-import type { ReactNode } from 'react'
+import katex from 'katex'
+import 'katex/contrib/mhchem'
+import 'katex/dist/katex.min.css'
 
 import type { EquationPhase } from './types'
 
 
-const SUBSCRIPT_DIGITS: Record<string, string> = {
-  '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
-  '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
-}
-
-function chemistryFormulaText(formula: string): string {
-  return formula.replace(/\d/g, (digit) => SUBSCRIPT_DIGITS[digit])
-}
-
-function chargeText(charge: number): string {
-  if (charge === 0) return ''
+function chargeExpression(charge: number): string {
+  if (!charge) return ''
   const magnitude = Math.abs(charge)
-  return `${magnitude === 1 ? '' : magnitude}${charge > 0 ? '+' : '-'}`
+  return `^{${magnitude === 1 ? '' : magnitude}${charge > 0 ? '+' : '-'}}`
+}
+
+function renderChemistry(expression: string): string {
+  return katex.renderToString(`\\ce{${expression}}`, {
+    output: 'htmlAndMathml',
+    throwOnError: false,
+    strict: 'ignore',
+    trust: false,
+  })
 }
 
 interface ChemistryNotationProps {
   formula: string
   charge?: number
   phase?: EquationPhase | null
-  coefficient?: number
+  coefficient?: number | string
 }
 
 export default function ChemistryNotation({
@@ -31,10 +33,24 @@ export default function ChemistryNotation({
   phase = null,
   coefficient,
 }: ChemistryNotationProps) {
-  const parts: ReactNode[] = []
-  if (coefficient && coefficient !== 1) parts.push(coefficient)
-  parts.push(chemistryFormulaText(formula))
-  if (charge) parts.push(<sup key="charge">{chargeText(charge)}</sup>)
-  if (phase) parts.push(<span key="phase" className="chem-phase">({phase})</span>)
-  return <span className="chem-notation">{parts}</span>
+  const coefficientText = coefficient && String(coefficient) !== '1' ? `${coefficient} ` : ''
+  const phaseText = phase ? `(${phase})` : ''
+  const expression = `${coefficientText}${formula}${chargeExpression(charge)}${phaseText}`
+  return (
+    <span
+      className="chem-notation"
+      aria-label={expression}
+      dangerouslySetInnerHTML={{ __html: renderChemistry(expression) }}
+    />
+  )
+}
+
+export function ChemistryEquation({ expression }: { expression: string }) {
+  return (
+    <span
+      className="chem-equation"
+      aria-label={expression}
+      dangerouslySetInnerHTML={{ __html: renderChemistry(expression) }}
+    />
+  )
 }

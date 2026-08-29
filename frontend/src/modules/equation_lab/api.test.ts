@@ -1,6 +1,12 @@
 import { afterEach, expect, test, vi } from 'vitest'
 
-import { balanceEquation, findReactionCandidates, searchCatalogSpecies } from './api'
+import {
+  balanceEquation,
+  completeCatalogSpecies,
+  findReactionCandidates,
+  loadReactionDetail,
+  searchCatalogSpecies,
+} from './api'
 
 
 afterEach(() => vi.unstubAllGlobals())
@@ -94,6 +100,34 @@ test('passes controlled composition resolution facts to the existing catalog end
 
   expect(fetchMock).toHaveBeenCalledWith(
     '/v1/catalog/species?equation_mode=ionic&limit=50&composition=%7B%22Na%22%3A2%2C%22O%22%3A4%2C%22S%22%3A1%7D&charge=0&entity_kind=substance',
+    { headers: { Accept: 'application/json' }, signal: undefined },
+  )
+})
+
+test('queries the backend-owned composition completion endpoint without partial charge', async () => {
+  const payload = [{ consolidatedId: 'species:strontium-sulfate', formula: 'SrSO4' }]
+  const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(payload) }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await expect(completeCatalogSpecies({
+    composition: { O: 4, S: 1, Sr: 1 },
+    equationMode: 'molecular',
+  })).resolves.toBe(payload)
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/v1/catalog/species/completions?composition=%7B%22O%22%3A4%2C%22S%22%3A1%2C%22Sr%22%3A1%7D&entity_kind=substance&limit=50&equation_mode=molecular',
+    { headers: { Accept: 'application/json' }, signal: undefined },
+  )
+})
+
+test('loads reviewed reaction detail from its catalog boundary', async () => {
+  const payload = { consolidatedId: 'reaction:agno3-nacl', concepts: [], phenomena: [] }
+  const fetchMock = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(payload) }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await expect(loadReactionDetail('reaction:agno3-nacl')).resolves.toBe(payload)
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/v1/catalog/reactions/reaction%3Aagno3-nacl/detail',
     { headers: { Accept: 'application/json' }, signal: undefined },
   )
 })

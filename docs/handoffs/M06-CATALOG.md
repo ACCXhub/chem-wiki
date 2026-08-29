@@ -16,9 +16,11 @@
 
 ## Persistence and identity
 
-- migrations `20260826_03_knowledge_catalog` 与 `20260828_04_phase1_knowledge` 建立
+- migrations `20260826_03_knowledge_catalog`、`20260828_04_phase1_knowledge` 与
+  `20260829_05_phase2a_reaction_experience` 建立
   release/artifact、species mapping、source crosswalk、teaching projection、Structure link、
-  catalog Reaction/participant，以及 reviewed knowledge / accepted Structure record 表。
+  catalog Reaction/participant、reviewed knowledge / accepted Structure record，以及 learner-facing
+  source attribution 表。
 - 309 条 species 全部导入：58 个 ion、251 个 substance。consolidated ID 是稳定外部 key；
   `catalog_species.application_id` 是稳定 UUID，并由 `entity_kind` 明确解释为 M01 `IonId` 或
   `SubstanceId`。二次导入保持 UUID 与行数不变。
@@ -29,6 +31,9 @@
   `structure_id` 与独立 application Structure UUID mapping；未关联 species 不生成结构数据。
 - pinned release 的 `knowledge_records.jsonl` 中 127 条 reviewed Concept/Phenomenon 内容已导入；
   Structure Registry 的 69 条 accepted records 保留 canonical/isomeric SMILES 与 provenance。
+- pinned reviewed inorganic source registry 中 7 条可读 attribution 进入
+  `catalog_source_attribution`。这是 durable provenance → learner attribution read projection，避免
+  request-time 依赖外部 checkout；未解析来源不会把内部 ID 暴露给学习者。
 
 ## Reaction materialization
 
@@ -49,8 +54,13 @@
   排序，有 mode 时优先 recommended / available / deemphasized。
 - 返回值明确区分 `ion | substance`，并包含 consolidated ID、稳定 application UUID、formula、
   charge、category、tags、Palette rank 与三种 equation suitability。结果语义为 `0..N`。
+- `GET /v1/catalog/species/completions` 保留 exact lookup 之外的 composition completion：默认仅返回
+  substance，并按 exact composition、已选计数满足度、缺口、额外元素/原子、方程适用性、教学优先级、
+  Palette rank 与 consolidated ID 稳定排序。
 - `GET /v1/catalog/reactions/{consolidated_id}` 提供 catalog Reaction 的 materialization state、
   原因、原始 coefficient、non-species ref 与 application target mapping，供后续阶段追溯。
+- `GET /v1/catalog/reactions/{consolidated_id}/detail` 投影 canonical participants、可逆性、类型、条件、
+  reviewed concepts/phenomena、related species、Structure 可用性与已解析 source attribution；空字段省略。
 - `GET /v1/catalog/species/{application_species_id}/structure` 返回 accepted Structure entry，
   供 Structure Lab 从稳定 application species UUID 直接载入已知结构。
 
@@ -63,7 +73,9 @@
 - Ruff：`All checks passed`；format：`90 files already formatted`。
 - Alembic `upgrade head` 与 `check` 通过，结果为 `No new upgrade operations detected.`。
 - 实际 CLI import 输出：309 species、309 teaching projections、69 Structure links、183 catalog
-  reactions、175 M05 materialized reactions、8 catalog-only reactions。
+  reactions、175 M05 materialized reactions、8 catalog-only reactions、7 source attributions。
+- Phase 2A catalog 单元测试 `8 passed`，knowledge catalog + M07 聚焦测试 `12 passed`，真实
+  PostgreSQL integration `1 passed`；Ruff check/format 通过。
 
 ## Preserved scope
 

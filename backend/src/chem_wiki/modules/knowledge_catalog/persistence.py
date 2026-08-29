@@ -90,6 +90,14 @@ class CatalogSourceCrosswalkRow(KnowledgeCatalogBase):
     notes: Mapped[str | None] = mapped_column(Text)
 
 
+class CatalogSourceAttributionRow(KnowledgeCatalogBase):
+    __tablename__ = "catalog_source_attribution"
+
+    source_ref: Mapped[str] = mapped_column(String(240), primary_key=True)
+    name: Mapped[str] = mapped_column(String(240), nullable=False)
+    url: Mapped[str | None] = mapped_column(Text)
+
+
 class CatalogTeachingProjectionRow(KnowledgeCatalogBase):
     __tablename__ = "catalog_teaching_projection"
     __table_args__ = (
