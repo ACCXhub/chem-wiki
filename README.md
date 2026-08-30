@@ -107,7 +107,24 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
 - Docker Desktop / Docker Compose
 - PostgreSQL 17
 
-## 本地运行
+## 一键启动（推荐）
+
+在仓库根目录双击 [start-chem-wiki.cmd](start-chem-wiki.cmd)。它会复用现有数据库与目录数据，确保
+PostgreSQL、迁移、后端和前端依次就绪后打开 `http://127.0.0.1:5173/`。
+
+首次只需完成依赖准备；启动器不会每天重复安装或导入数据：
+
+```powershell
+Set-Location backend
+uv sync --locked --dev
+
+Set-Location ..\frontend
+npm ci
+```
+
+双击 [stop-chem-wiki.cmd](stop-chem-wiki.cmd) 只会停止由本仓库识别的 Uvicorn/Vite 开发服务；PostgreSQL 默认继续运行。
+
+## 手动运行与排障
 
 以下命令从仓库根目录执行。
 
