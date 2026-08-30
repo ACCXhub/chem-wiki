@@ -10,7 +10,7 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
 
 - React + TypeScript 前端、FastAPI + PostgreSQL 后端；
 - Chemistry Core 领域身份与模块边界；
-- 118 元素周期表、真实发布属性与 catalog-backed Element Wiki；
+- 118 元素周期表、真实发布属性与 catalog-backed Element Wiki；周期表以高中教学族标（IA–0，VIII 跨三列）展示；
 - Cytoscape.js 局部知识图，以及元素 → 物质 / 反应 / 概念 / 现象探索；
 - EquationDraft、物态、拖放、重排、左右移动、Undo/Redo、复制；
 - 分子方程式、离子方程式、净离子方程式配平；
@@ -23,6 +23,7 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
 - RDKit 结构解析、描述符、2D/3D 数据生成与官能团识别；
 - 3Dmol.js 交互式三维分子展示；
 - 紧凑的 Equation Lab 物质库、收藏/最近和 Builder 交互。
+- 全局明亮 / 深色 / 跟随系统外观；默认明亮，并在本机记住选择。
 
 当前产品重心是把这些能力连接成连续学习流程。长期方向见 [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md)。
 

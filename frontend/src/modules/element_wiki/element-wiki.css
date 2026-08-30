@@ -450,3 +450,20 @@
     min-height: 22rem;
   }
 }
+
+/* General UI surfaces follow the global appearance tokens; category and graph node colors remain semantic. */
+.wiki-breadcrumb { color: var(--text-muted); }
+.wiki-breadcrumb button { color: var(--accent); }
+.wiki-hero { border-color: var(--border); background: radial-gradient(circle at 10% 15%, color-mix(in srgb, var(--category-color) 18%, transparent), transparent 28rem), var(--surface-raised); box-shadow: var(--shadow); }
+.wiki-symbol { border-color: color-mix(in srgb, var(--category-color) 75%, var(--surface)); background: color-mix(in srgb, var(--category-color) 18%, var(--surface-muted)); }
+.wiki-symbol span, .wiki-title > p:last-child, .wiki-section-heading > p, .wiki-properties span, .wiki-properties small, .wiki-sections header p, .wiki-empty, .graph-empty, .wiki-node-list span, .wiki-node-list small, .graph-selection span, .graph-selection p, .graph-center span, .graph-center small, .wiki-sources span, .wiki-sources small, .wiki-state > p:not(.eyebrow) { color: var(--text-muted); }
+.wiki-classification, .wiki-classification div, .wiki-panel, .wiki-properties article, .wiki-sections > article, .wiki-node-list li, .graph-selection, .wiki-sources li { border-color: var(--border); }
+.wiki-classification dd, .graph-selection strong { color: var(--text-primary); }
+.wiki-panel { background: var(--surface-raised); box-shadow: var(--shadow); }
+.wiki-properties article, .wiki-sections > article, .graph-selection { background: var(--surface-muted); }
+.wiki-properties article.is-missing { background: repeating-linear-gradient(135deg, var(--surface-muted) 0 8px, var(--surface-subtle) 8px 16px); }
+.wiki-properties strong, .wiki-node-list button:hover strong { color: var(--accent-warm); }
+.graph-canvas { border-color: var(--border-strong); background: radial-gradient(circle, color-mix(in srgb, var(--accent) 16%, transparent), transparent 65%); }
+.graph-selection button { border-color: var(--border-strong); color: var(--text-primary); background: var(--control-bg); }
+.graph-center { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, var(--surface-muted)); }
+.wiki-sources a, .wiki-sources strong { color: var(--accent); }

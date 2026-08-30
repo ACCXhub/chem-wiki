@@ -3,6 +3,20 @@ import { expect, test, vi } from 'vitest'
 
 const elements = [
   {
+    id: 'co-id',
+    atomicNumber: 27,
+    symbol: 'Co',
+    nameZh: '钴',
+    nameEn: 'cobalt',
+    category: 'transition-metal',
+    status: 'confirmed',
+    layout: { period: 4, group: 9, row: 4, column: 9, block: 'd' },
+    properties: {
+      electronegativity: { value: 1.88, unit: 'Pauling' },
+      firstIonizationEnergy: { value: 7.88, unit: 'eV' },
+    },
+  },
+  {
     id: 'h-id',
     atomicNumber: 1,
     symbol: 'H',
@@ -80,9 +94,41 @@ test('renders period and group coordinates plus the metal nonmetal staircase', a
 
   expect(screen.getByTestId('period-label-1')).toHaveTextContent('1')
   expect(screen.getByTestId('period-label-7')).toHaveTextContent('7')
-  expect(screen.getByTestId('group-label-1')).toHaveTextContent('1')
-  expect(screen.getByTestId('group-label-18')).toHaveTextContent('18')
-  expect(screen.getByTestId('metal-nonmetal-boundary')).toBeInTheDocument()
+  expect(screen.getByTestId('group-label-1')).toHaveTextContent('IA')
+  expect(screen.getByTestId('group-label-18')).toHaveTextContent('0')
+  expect(screen.getByTestId('group-label-8')).toHaveTextContent('VIII')
+  expect(screen.getByTestId('group-label-8')).toHaveAttribute('data-modern-groups', '8,9,10')
+  expect(screen.queryByTestId('group-label-9')).not.toBeInTheDocument()
+  expect(screen.getByTestId('metal-nonmetal-boundary')).not.toBeEmptyDOMElement()
+})
+
+test('derives high-school group labels without owning a second element dataset', async () => {
+  const { teachingGroupLabel } = await import('./teaching-groups')
+  expect(teachingGroupLabel(1)).toBe('IA')
+  expect(teachingGroupLabel(2)).toBe('IIA')
+  expect(teachingGroupLabel(3)).toBe('IIIB')
+  expect(teachingGroupLabel(7)).toBe('VIIB')
+  expect(teachingGroupLabel(8)).toBe('VIII')
+  expect(teachingGroupLabel(9)).toBe('VIII')
+  expect(teachingGroupLabel(10)).toBe('VIII')
+  expect(teachingGroupLabel(11)).toBe('IB')
+  expect(teachingGroupLabel(12)).toBe('IIB')
+  expect(teachingGroupLabel(13)).toBe('IIIA')
+  expect(teachingGroupLabel(17)).toBe('VIIA')
+  expect(teachingGroupLabel(18)).toBe('0')
+})
+
+test('inspector makes the teaching period and group primary', async () => {
+  const { PeriodicTableView } = await import('./PeriodicTable')
+  render(<PeriodicTableView elements={[...elements]} />)
+
+  const cobalt = screen.getByRole('button', { name: '27 钴 Co' })
+  fireEvent.pointerEnter(cobalt, { clientX: 40, clientY: 40 })
+
+  const inspector = screen.getByRole('tooltip')
+  expect(inspector).toHaveTextContent('第 4 周期')
+  expect(inspector).toHaveTextContent('VIII 族')
+  expect(inspector).toHaveTextContent('现代族号：9')
 })
 
 

@@ -96,3 +96,21 @@
 @media (prefers-reduced-motion: reduce) {
   .structure-highlight-layer circle { transition: none; }
 }
+
+/* Ketcher and 3Dmol keep their own renderers; the surrounding learner UI uses global theme tokens. */
+.structure-breadcrumb { color: var(--text-muted); }
+.structure-breadcrumb button { color: var(--accent); }
+.structure-hero, .structure-panel { border-color: var(--border); background: var(--surface-raised); box-shadow: var(--shadow); }
+.structure-hero > div > p:last-child, .structure-hero-mark, .structure-panel-heading > span, .structure-smiles-form label, .structure-input-note, .structure-empty, .structure-3d-frame > p, .structure-formula span, .structure-formula code, .structure-descriptors dt, .functional-groups button small, .functional-groups button code, .structure-no-groups, .structure-boundary { color: var(--text-muted); }
+.structure-hero-mark span { border-color: var(--border-strong); color: var(--accent-warm); }
+.structure-examples button, .structure-smiles-form input, .functional-groups > button, .structure-descriptors div { border-color: var(--border-strong); color: var(--text-primary); background: var(--control-bg); }
+.structure-smiles-form input { background: var(--input-bg); }
+.structure-smiles-form button { border-color: var(--accent-warm); color: var(--accent-warm-text); background: var(--accent-warm); }
+.structure-ketcher, .structure-depiction { border-color: var(--border-strong); }
+.structure-3d-frame { border-color: var(--border-strong); background: var(--surface-subtle); }
+.structure-formula { border-left-color: var(--accent-warm); background: color-mix(in srgb, var(--accent-warm) 12%, var(--surface-muted)); }
+.structure-formula strong, .functional-groups button em { color: var(--accent-warm); }
+.functional-groups > button:hover, .functional-groups > button:focus-visible { border-color: var(--accent-warm); background: var(--control-hover); }
+.structure-boundary { border-color: var(--border-strong); }
+.structure-boundary strong, .structure-descriptors dd { color: var(--text-primary); }
+.structure-error, .structure-viewer-error { border-color: var(--danger); color: var(--danger); background: var(--danger-bg); }

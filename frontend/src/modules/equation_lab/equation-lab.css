@@ -341,6 +341,28 @@
   .reaction-species-list { min-width: 0; }
 }
 
+/* General workbench chrome follows global tokens. Reaction, ion and validation colors remain semantic. */
+.lab-breadcrumb { color: var(--text-muted); }
+.lab-breadcrumb button, .focused-reaction-knowledge details summary, .reaction-sources a, .show-elements { color: var(--accent); }
+.equation-lab-header > div > p:last-child, .auto-balance-control, .focused-reaction-knowledge, .reaction-detail-state, .balance-tools, .candidate-overflow, .reaction-candidate-state, .manual-equation-input > span, .lab-heading > span, .advanced-equation-input label, .catalog-state, .builder-matches > p, .conservation-table-wrap caption { color: var(--text-muted); }
+.composer-panel, .species-palette, .reaction-candidates, .reaction-candidate-state { border-color: var(--border); background: var(--surface-raised); }
+.mode-switcher, .palette-mode-switch, .builder-source-switch, .copy-equation, .history-button, .manual-input-toggle, .tray-count button { background: var(--surface-subtle); }
+.mode-switcher button, .clear-draft, .category-nav button, .species-add-actions button, .palette-mode-switch button, .builder-source-switch button, .name-display-toggle { color: var(--text-secondary); }
+.mode-switcher button[aria-pressed='true'], .lab-submit { color: var(--accent-warm-text); background: var(--accent-warm); }
+.equation-composer { border-color: color-mix(in srgb, var(--accent-warm) 55%, var(--border)); background: linear-gradient(90deg, var(--surface-muted), color-mix(in srgb, var(--accent-warm) 12%, var(--surface)), var(--surface-muted)); }
+.equation-composer.is-dragging .draft-side { border-color: var(--accent); background: var(--surface-muted); }
+.equation-composer.is-dragging .draft-side.is-drag-target, .draft-participant.is-drop-target { border-color: var(--accent-warm); background: var(--surface-subtle); }
+.draft-participant, .phase-selector, .reaction-candidate, .species-block, .builder-blocks button, .tray-entry { border-color: var(--border-strong); color: var(--text-primary); background: var(--control-bg); }
+.draft-participant.kind-ion { background: color-mix(in srgb, #557896 14%, var(--surface-muted)); }
+.draft-participant.source-canonical { background: color-mix(in srgb, var(--accent-warm) 12%, var(--surface-muted)); }
+.draft-participant > span, .phase-selector button, .reaction-learning-item p, .reaction-species-item button, .manual-equation-input input, .name-display-toggle, .palette-mode-switch button, .builder-source-switch button, .builder-blocks button, .tray-count button { color: var(--text-secondary); }
+.manual-equation-input, .species-block, .advanced-equation-input input { border-color: var(--border); background: var(--surface-subtle); }
+.manual-equation-input input, .advanced-equation-input input { color: var(--text-primary); }
+.settled-equation:hover, .settled-equation:focus-visible { background: color-mix(in srgb, var(--accent-warm) 12%, var(--surface)); }
+.reaction-candidate.is-central, .palette-mode-switch button[aria-pressed='true'], .builder-source-switch button[aria-pressed='true'], .category-nav button[aria-pressed='true'] { background: color-mix(in srgb, var(--accent-warm) 16%, var(--surface-muted)); }
+.reaction-candidate-state.is-error, .catalog-state.is-error, .reaction-detail-state.is-error { color: var(--danger); }
+.lab-error { border-color: var(--danger); color: var(--danger); background: var(--danger-bg); }
+
 @media (max-width: 480px) {
   .equation-lab-page { padding: .7rem; }
   .composer-toolbar { align-items: stretch; flex-direction: column; }

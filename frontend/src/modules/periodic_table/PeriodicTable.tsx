@@ -8,6 +8,7 @@ import {
 } from 'react'
 
 import { loadPeriodicTableElements } from './api'
+import { teachingGroupHeaders, teachingGroupLabel } from './teaching-groups'
 import type { ElementCategory, PeriodicTableElement } from './types'
 import './periodic-table.css'
 
@@ -41,13 +42,13 @@ const MODES: readonly { id: DisplayMode; label: string }[] = [
   { id: 'firstIonizationEnergy', label: '第一电离能' },
 ]
 
-const GROUPS = Array.from({ length: 18 }, (_, index) => index + 1)
 const PERIODS = Array.from({ length: 7 }, (_, index) => index + 1)
 const STAIRCASE_STEPS = [
-  { column: 15, row: 3 },
-  { column: 16, row: 4 },
-  { column: 17, row: 5 },
-  { column: 18, row: 6 },
+  { column: 14, row: 3 },
+  { column: 15, row: 4 },
+  { column: 16, row: 5 },
+  { column: 17, row: 6 },
+  { column: 17, row: 7 },
 ] as const
 const INSPECTOR_WIDTH = 288
 const INSPECTOR_HEIGHT = 410
@@ -151,7 +152,7 @@ export function PeriodicTableView({
         </div>
         <div className="hero-stat" aria-label={`${elements.length} 个元素`}>
           <strong>{elements.length}</strong>
-          <span>个正式元素</span>
+          <span>个元素</span>
         </div>
       </header>
 
@@ -195,16 +196,21 @@ export function PeriodicTableView({
 
           <div className="table-scroll" tabIndex={0} aria-label="可横向滚动的周期表">
             <div className="periodic-grid">
-              {GROUPS.map((group) => (
+              {teachingGroupHeaders.map((header) => {
+                const start = header.modernGroups[0]
+                const end = header.modernGroups[header.modernGroups.length - 1]
+                return (
                 <span
-                  key={group}
+                  key={header.label}
                   className="group-label"
-                  data-testid={`group-label-${group}`}
-                  style={{ gridColumn: group + 1, gridRow: 1 }}
+                  data-testid={`group-label-${start}`}
+                  data-modern-groups={header.modernGroups.join(',')}
+                  style={{ gridColumn: `${start + 1} / ${end + 2}`, gridRow: 1 }}
                 >
-                  {group}
+                  {header.label}
                 </span>
-              ))}
+                )
+              })}
               {PERIODS.map((period) => (
                 <span
                   key={period}
@@ -223,6 +229,7 @@ export function PeriodicTableView({
                 {STAIRCASE_STEPS.map((step) => (
                   <i
                     key={`${step.column}:${step.row}`}
+                    className="metal-nonmetal-boundary-step"
                     style={{ gridColumn: step.column, gridRow: step.row }}
                   />
                 ))}
@@ -312,7 +319,7 @@ export function PeriodicTableView({
                 <h2>{`${inspector.element.nameZh} ${inspector.element.symbol}`}</h2>
               </div>
               <span className="status-badge">
-                {inspector.element.status === 'confirmed' ? '正式元素' : '预测元素'}
+                {inspector.element.status === 'confirmed' ? '已收录' : '预测元素'}
               </span>
             </div>
             <dl className="element-facts">
@@ -321,10 +328,19 @@ export function PeriodicTableView({
                 <dd>{inspector.element.atomicNumber}</dd>
               </div>
               <div>
-                <dt>周期 / 族</dt>
+                <dt>周期</dt>
+                <dd>第 {inspector.element.layout.period} 周期</dd>
+              </div>
+              <div>
+                <dt>族</dt>
                 <dd>
-                  {inspector.element.layout.period} / {inspector.element.layout.group ?? '镧锕系'}
+                  {inspector.element.layout.group === null
+                    ? teachingGroupLabel(null)
+                    : `${teachingGroupLabel(inspector.element.layout.group)} 族`}
                 </dd>
+                {inspector.element.layout.group !== null ? (
+                  <small>现代族号：{inspector.element.layout.group}</small>
+                ) : null}
               </div>
               <div>
                 <dt>元素类别</dt>
