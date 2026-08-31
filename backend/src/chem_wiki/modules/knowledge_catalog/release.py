@@ -14,6 +14,11 @@ CONSUMED_ARTIFACTS = (
     "reactions.jsonl",
     "teaching_projection.jsonl",
     "knowledge_records.jsonl",
+    "knowledge_links.jsonl",
+    "species_phase_facts.jsonl",
+    "species_thermochemistry.jsonl",
+    "phase_transitions.jsonl",
+    "bond_enthalpies.jsonl",
 )
 
 
@@ -28,8 +33,8 @@ class PinnedRelease:
 
 PINNED_RELEASE = PinnedRelease(
     repository="https://github.com/ACCXhub/chem-knowledge-data.git",
-    release="consolidated-1.0.0",
-    commit="c1bf05dd68c936cb0cedf8c6877bbac0f68025e9",
+    release="consolidated-1.1.0",
+    commit="a6311150436038ca06fa7b9d05de39da9e1de815",
     state="READY_FOR_APP_IMPORT",
     expected_counts=(
         ("species", 309),
@@ -38,6 +43,11 @@ PINNED_RELEASE = PinnedRelease(
         ("reactions", 183),
         ("teaching_projections", 309),
         ("knowledge_records", 637),
+        ("knowledge_links", 176),
+        ("species_phase_facts", 18),
+        ("species_thermochemistry", 20),
+        ("phase_transitions", 2),
+        ("bond_enthalpies", 14),
     ),
 )
 
@@ -183,6 +193,13 @@ def verify_release(
         "reactions.jsonl": dict(PINNED_RELEASE.expected_counts)["reactions"],
         "teaching_projection.jsonl": dict(PINNED_RELEASE.expected_counts)["teaching_projections"],
         "knowledge_records.jsonl": dict(PINNED_RELEASE.expected_counts)["knowledge_records"],
+        "knowledge_links.jsonl": dict(PINNED_RELEASE.expected_counts)["knowledge_links"],
+        "species_phase_facts.jsonl": dict(PINNED_RELEASE.expected_counts)["species_phase_facts"],
+        "species_thermochemistry.jsonl": dict(PINNED_RELEASE.expected_counts)[
+            "species_thermochemistry"
+        ],
+        "phase_transitions.jsonl": dict(PINNED_RELEASE.expected_counts)["phase_transitions"],
+        "bond_enthalpies.jsonl": dict(PINNED_RELEASE.expected_counts)["bond_enthalpies"],
     }
     for name in CONSUMED_ARTIFACTS:
         metadata = files.get(name)

@@ -127,7 +127,9 @@ function Get-ChemWikiService([ValidateSet('Backend', 'Frontend')] [string]$Name)
 
   $commandLine = $process.CommandLine
   $isExpected = if ($Name -eq 'Backend') {
-    $process.ExecutablePath -eq $Python -and $commandLine -match 'uvicorn'
+    $commandLine.Contains($Python) -and
+      $commandLine.Contains('chem_wiki.main:app') -and
+      $commandLine.Contains((Join-Path $BackendRoot 'src'))
   } else {
     $commandLine.Contains($ViteScript)
   }
@@ -164,8 +166,28 @@ function Start-ChemWiki {
   $databaseUrlLine = Get-Content -LiteralPath $envPath | Where-Object { $_ -match '^\s*DATABASE_URL\s*=' } | Select-Object -First 1
   if (-not $databaseUrlLine) { throw '.env 缺少 DATABASE_URL。请从 .env.example 补充后重试。' }
   $env:DATABASE_URL = ($databaseUrlLine -replace '^\s*DATABASE_URL\s*=\s*', '').Trim().Trim('"')
+  $backendSource = Join-Path $BackendRoot 'src'
+  $env:PYTHONPATH = if ($env:PYTHONPATH) {
+    "$backendSource$([IO.Path]::PathSeparator)$env:PYTHONPATH"
+  } else {
+    $backendSource
+  }
 
   Invoke-Native $Python @('-m', 'alembic', '-c', (Join-Path $BackendRoot 'alembic.ini'), 'upgrade', 'head') '数据库迁移失败'
+
+  if (-not $env:KNOWLEDGE_CATALOG_SOURCE) {
+    $siblingCatalog = Join-Path (Split-Path $RepoRoot -Parent) 'chem-knowledge-data'
+    if (Test-Path -LiteralPath $siblingCatalog) {
+      $env:KNOWLEDGE_CATALOG_SOURCE = $siblingCatalog
+    }
+  }
+  Push-Location $BackendRoot
+  try {
+    Invoke-Native $Python @('-m', 'chem_wiki.modules.knowledge_catalog.cli', '--if-missing') '目录数据初始化失败'
+  } finally {
+    Pop-Location
+  }
+  Write-Status '目录数据已就绪'
 
   New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
   $backendProcess = Get-ChemWikiService 'Backend'

@@ -18,6 +18,11 @@ CONSUMED_ARTIFACTS = {
     "reactions.jsonl": '{"id":"reaction:test"}\n',
     "teaching_projection.jsonl": '{"species_id":"species:test"}\n',
     "knowledge_records.jsonl": '{"id":"knowledge:test"}\n',
+    "knowledge_links.jsonl": '{"id":"knowledge-link:test"}\n',
+    "species_phase_facts.jsonl": '{"id":"phase-fact:test"}\n',
+    "species_thermochemistry.jsonl": '{"id":"thermo:test"}\n',
+    "phase_transitions.jsonl": '{"id":"phase-transition:test"}\n',
+    "bond_enthalpies.jsonl": '{"id":"bond-enthalpy:test"}\n',
 }
 ARTIFACT_RECORD_COUNTS = {
     "species.jsonl": 309,
@@ -26,6 +31,11 @@ ARTIFACT_RECORD_COUNTS = {
     "reactions.jsonl": 183,
     "teaching_projection.jsonl": 309,
     "knowledge_records.jsonl": 637,
+    "knowledge_links.jsonl": 176,
+    "species_phase_facts.jsonl": 18,
+    "species_thermochemistry.jsonl": 20,
+    "phase_transitions.jsonl": 2,
+    "bond_enthalpies.jsonl": 14,
 }
 
 
@@ -52,6 +62,11 @@ def _write_release(root: Path, *, release: str | None = None, state: str | None 
             "reactions": 183,
             "teaching_projections": 309,
             "knowledge_records": 637,
+            "knowledge_links": 176,
+            "species_phase_facts": 18,
+            "species_thermochemistry": 20,
+            "phase_transitions": 2,
+            "bond_enthalpies": 14,
         },
         "files": files,
     }
@@ -71,7 +86,7 @@ def _pinned_identity() -> ReleaseSourceIdentity:
 def test_valid_pinned_release_verifies_all_consumed_artifacts(tmp_path: Path) -> None:
     verified = verify_release(_write_release(tmp_path), source_identity=_pinned_identity())
 
-    assert verified.release == "consolidated-1.0.0"
+    assert verified.release == "consolidated-1.1.0"
     assert verified.state == "READY_FOR_APP_IMPORT"
     assert tuple(verified.artifacts) == tuple(CONSUMED_ARTIFACTS)
 

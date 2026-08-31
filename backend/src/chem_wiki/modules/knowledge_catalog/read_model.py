@@ -1,9 +1,10 @@
 """Public DTOs for catalog search and reaction traceability."""
 
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def _to_camel(value: str) -> str:
@@ -68,12 +69,26 @@ class CatalogReactionResult(CatalogDto):
 class CatalogKnowledgeResult(CatalogDto):
     consolidated_id: str
     application_id: UUID
-    source_type: Literal["concept", "phenomenon"]
+    source_package: str
+    source_id: str
+    source_type: str
     display_name_zh: str
     teaching_priority: str
-    content_zh: str
+    content_zh: str | None
     related_reaction_ids: list[str]
     related_species_ids: list[str]
+    payload: dict[str, object]
+    links: list["CatalogKnowledgeLinkResult"] = Field(default_factory=list)
+    provenance_refs: list[str]
+    sources: list["CatalogSourceAttributionResult"] = Field(default_factory=list)
+
+
+class CatalogKnowledgeLinkResult(CatalogDto):
+    relation: str
+    target_kind: Literal["knowledge", "species", "structure", "element"]
+    target_id: str
+    resolution_method: str
+    evidence_refs: list[str]
 
 
 class CatalogStructureEntry(CatalogDto):
@@ -93,6 +108,64 @@ class CatalogRelatedSpeciesResult(CatalogSpeciesResult):
 class CatalogSourceAttributionResult(CatalogDto):
     name: str
     url: str | None
+
+
+class CatalogSpeciesPhaseFact(CatalogDto):
+    standard_phase: Literal["s", "l", "g", "aq"]
+    allowed_teaching_phases: list[Literal["s", "l", "g", "aq"]]
+    thermochemistry_available_phases: list[Literal["s", "l", "g", "aq"]]
+    phase_conditions: list[dict[str, object]]
+    reference_temperature_k: Decimal
+    standard_pressure_bar: Decimal
+    source_refs: list[str]
+    sources: list[CatalogSourceAttributionResult] = Field(default_factory=list)
+
+
+class CatalogSpeciesThermochemistry(CatalogDto):
+    phase: Literal["s", "l", "g", "aq"]
+    temperature_k: Decimal
+    standard_pressure_bar: Decimal
+    delta_f_h_kj_mol: Decimal | None
+    delta_f_g_kj_mol: Decimal | None
+    s_j_mol_k: Decimal | None
+    cp_j_mol_k: Decimal | None
+    method: str
+    source_refs: list[str]
+    sources: list[CatalogSourceAttributionResult] = Field(default_factory=list)
+
+
+class CatalogPhaseTransition(CatalogDto):
+    transition: str
+    from_phase: Literal["s", "l", "g", "aq"]
+    to_phase: Literal["s", "l", "g", "aq"]
+    enthalpy_kj_mol: Decimal
+    transition_temperature_k: Decimal
+    method: str
+    source_refs: list[str]
+    sources: list[CatalogSourceAttributionResult] = Field(default_factory=list)
+
+
+class CatalogBondEnthalpyResult(CatalogDto):
+    bond_enthalpy_id: str
+    atom1: str
+    atom2: str
+    bond_order: Decimal
+    environment_key: str
+    enthalpy_kj_mol: Decimal
+    temperature_k: Decimal
+    phase_scope: str
+    method: str
+    qualifier: str
+    source_refs: list[str]
+    sources: list[CatalogSourceAttributionResult] = Field(default_factory=list)
+
+
+class CatalogSpeciesThermochemistryContext(CatalogDto):
+    consolidated_species_id: str
+    application_species_id: UUID
+    phase_fact: CatalogSpeciesPhaseFact
+    thermochemistry: list[CatalogSpeciesThermochemistry]
+    phase_transitions: list[CatalogPhaseTransition]
 
 
 class CatalogReactionDetail(CatalogReactionResult):

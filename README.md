@@ -69,7 +69,9 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
 - 69 accepted Structure links；
 - 69 accepted Structure records；
 - 309 teaching projections；
-- 637 non-species knowledge records（其中 127 条 reviewed Concept/Phenomenon 已进入应用 catalog）；
+- 637 non-species knowledge records（已全部进入 generic application catalog）；
+- 176 reviewed knowledge links；
+- 18 phase facts、20 phase-specific thermochemistry records、2 phase transitions、14 bond-enthalpy references；
 - reviewed rules / curriculum projections。
 
 数据整合仓库：`ACCXhub/chem-knowledge-data`。
@@ -113,7 +115,8 @@ Chem Wiki 把元素、物质、结构、反应和课程知识连接成可继续�
 在仓库根目录双击 [start-chem-wiki.cmd](start-chem-wiki.cmd)。它会复用现有数据库与目录数据，确保
 PostgreSQL、迁移、后端和前端依次就绪后打开 `http://127.0.0.1:5173/`。
 
-首次只需完成依赖准备；启动器不会每天重复安装或导入数据：
+首次只需完成依赖准备。启动器不会每天重复安装；当应用首次 pin 新 consolidated release 时，
+会检测 `catalog_release` 并只导入一次，后续启动直接复用 PostgreSQL：
 
 ```powershell
 Set-Location backend
@@ -148,7 +151,7 @@ uv run python -m chem_wiki.data_setup
 
 # 外部 release manifest 使用 byte-exact SHA-256；Windows clone 必须保留 LF
 git -c core.autocrlf=false clone https://github.com/ACCXhub/chem-knowledge-data.git C:\path\to\chem-knowledge-data
-git -C C:\path\to\chem-knowledge-data checkout c1bf05dd68c936cb0cedf8c6877bbac0f68025e9
+git -C C:\path\to\chem-knowledge-data checkout a6311150436038ca06fa7b9d05de39da9e1de815
 
 # 指向位于 pinned release commit 的 chem-knowledge-data checkout
 $env:KNOWLEDGE_CATALOG_SOURCE = 'C:\path\to\chem-knowledge-data'

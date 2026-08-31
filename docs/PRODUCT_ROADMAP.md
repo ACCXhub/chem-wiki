@@ -36,6 +36,8 @@ The current consolidated chemistry release provides approximately:
 - 69 accepted Structure links;
 - 309 teaching projections;
 - 637 non-species knowledge records;
+- 176 reviewed resolved knowledge links;
+- 18 phase facts, 20 phase-specific thermochemistry records, 2 phase transitions and 14 educational bond-enthalpy references;
 - reviewed rules and curriculum projections.
 
 ## Locked architecture
@@ -189,7 +191,16 @@ M05 EquationDraft remains the interaction/history anchor. Canonical Reaction com
 
 稳定 M05 配平范围未扩展，因此本阶段无需引入 ChemPy。
 
-## Phase 3 — Structure experience
+## Phase 3A — Existing knowledge/data activation（已实现）
+
+`consolidated-1.1.0` 已将完整 generic knowledge envelope、Structural Chemistry resolved links 与
+Thermochemistry typed artifacts 激活到 `knowledge_catalog` / PostgreSQL read seam。应用保留 309 Species、
+183 Reactions 与 69 accepted Structure links 的既有 identity；H2O 气/液热化学保持一个 Species 下的两条
+phase records。Windows launcher 只在新 pinned release 缺失时执行一次 catalog import。
+
+本阶段没有新增 learner-facing Structure UI，也没有 reaction enthalpy 或 bond-change calculation。
+
+## Phase 3B — Structure experience
 
 **Goal:** make catalog-backed structure exploration part of normal chemistry navigation.
 

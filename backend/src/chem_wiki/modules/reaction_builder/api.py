@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from chem_wiki.modules.knowledge_catalog import (
-    CatalogReader,
     CatalogReactionParticipantResult,
+    CatalogReader,
     get_catalog_reader,
 )
 
@@ -114,8 +114,7 @@ def find_candidates(
                 name_zh=candidate.reaction.name_zh,
                 materialization_state=candidate.reaction.materialization_state,
                 participants=[
-                    _participant_dto(participant)
-                    for participant in candidate.reaction.participants
+                    _participant_dto(participant) for participant in candidate.reaction.participants
                 ],
                 equation=candidate.reaction.equation,
                 reversible=candidate.reaction.reversible,

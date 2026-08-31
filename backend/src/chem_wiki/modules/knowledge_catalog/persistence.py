@@ -1,6 +1,7 @@
 """Application-owned persistence for the consolidated knowledge catalog."""
 
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
@@ -8,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -158,10 +160,6 @@ class CatalogStructureRecordRow(KnowledgeCatalogBase):
 class CatalogKnowledgeRecordRow(KnowledgeCatalogBase):
     __tablename__ = "catalog_knowledge_record"
     __table_args__ = (
-        CheckConstraint(
-            "source_type IN ('concept', 'phenomenon')",
-            name="ck_catalog_knowledge_record_type",
-        ),
         UniqueConstraint("application_id", name="uq_catalog_knowledge_record_application_id"),
     )
 
@@ -169,14 +167,126 @@ class CatalogKnowledgeRecordRow(KnowledgeCatalogBase):
     application_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
     source_package: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     source_id: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
-    source_type: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     display_name_zh: Mapped[str] = mapped_column(String(240), nullable=False)
     teaching_priority: Mapped[str] = mapped_column(String(16), nullable=False)
-    content_zh: Mapped[str] = mapped_column(Text, nullable=False)
+    content_zh: Mapped[str | None] = mapped_column(Text)
     related_reaction_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     related_species_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     provenance_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+
+
+class CatalogKnowledgeLinkRow(KnowledgeCatalogBase):
+    __tablename__ = "catalog_knowledge_link"
+    __table_args__ = (
+        CheckConstraint(
+            "target_kind IN ('knowledge', 'species', 'structure', 'element')",
+            name="ck_catalog_knowledge_link_target_kind",
+        ),
+    )
+
+    link_id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    source_knowledge_id: Mapped[str] = mapped_column(
+        String(240),
+        ForeignKey("catalog_knowledge_record.consolidated_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    relation: Mapped[str] = mapped_column(String(80), nullable=False)
+    target_kind: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    target_id: Mapped[str] = mapped_column(String(240), nullable=False, index=True)
+    resolution_method: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+
+
+class CatalogSpeciesPhaseFactRow(KnowledgeCatalogBase):
+    __tablename__ = "catalog_species_phase_fact"
+
+    species_id: Mapped[str] = mapped_column(
+        String(200),
+        ForeignKey("catalog_species.consolidated_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    phase_fact_id: Mapped[str] = mapped_column(String(240), nullable=False, unique=True)
+    standard_phase: Mapped[str] = mapped_column(String(2), nullable=False)
+    allowed_teaching_phases: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    thermochemistry_available_phases: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    phase_conditions: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    reference_temperature_k: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False)
+    standard_pressure_bar: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False)
+    source_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+
+
+class CatalogSpeciesThermochemistryRow(KnowledgeCatalogBase):
+    __tablename__ = "catalog_species_thermochemistry"
+    __table_args__ = (
+        UniqueConstraint(
+            "species_id",
+            "phase",
+            "temperature_k",
+            "standard_pressure_bar",
+            name="uq_catalog_species_thermochemistry_key",
+        ),
+    )
+
+    thermochemistry_id: Mapped[str] = mapped_column(String(240), primary_key=True)
+    species_id: Mapped[str] = mapped_column(
+        String(200),
+        ForeignKey("catalog_species.consolidated_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    phase: Mapped[str] = mapped_column(String(2), nullable=False)
+    temperature_k: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False)
+    standard_pressure_bar: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False)
+    delta_f_h_kj_mol: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    delta_f_g_kj_mol: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    s_j_mol_k: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    cp_j_mol_k: Mapped[Decimal | None] = mapped_column(Numeric(16, 6))
+    method: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_species_name: Mapped[str | None] = mapped_column(String(120))
+    source_note: Mapped[str | None] = mapped_column(Text)
+    source_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+
+
+class CatalogPhaseTransitionRow(KnowledgeCatalogBase):
+    __tablename__ = "catalog_phase_transition"
+
+    transition_id: Mapped[str] = mapped_column(String(240), primary_key=True)
+    species_id: Mapped[str] = mapped_column(
+        String(200),
+        ForeignKey("catalog_species.consolidated_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    transition: Mapped[str] = mapped_column(String(48), nullable=False)
+    from_phase: Mapped[str] = mapped_column(String(2), nullable=False)
+    to_phase: Mapped[str] = mapped_column(String(2), nullable=False)
+    enthalpy_kj_mol: Mapped[Decimal] = mapped_column(Numeric(16, 6), nullable=False)
+    transition_temperature_k: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False)
+    method: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+
+
+class CatalogBondEnthalpyRow(KnowledgeCatalogBase):
+    __tablename__ = "catalog_bond_enthalpy"
+
+    bond_enthalpy_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    atom1: Mapped[str] = mapped_column(String(3), nullable=False)
+    atom2: Mapped[str] = mapped_column(String(3), nullable=False)
+    bond_order: Mapped[Decimal] = mapped_column(Numeric(4, 2), nullable=False)
+    environment_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    enthalpy_kj_mol: Mapped[Decimal] = mapped_column(Numeric(16, 6), nullable=False)
+    temperature_k: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False)
+    phase_scope: Mapped[str] = mapped_column(String(24), nullable=False)
+    method: Mapped[str] = mapped_column(String(160), nullable=False)
+    qualifier: Mapped[str] = mapped_column(Text, nullable=False)
+    source_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
 
 
 class CatalogReactionRow(KnowledgeCatalogBase):

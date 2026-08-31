@@ -15,9 +15,11 @@ from chem_wiki.infrastructure.database import create_database_engine, create_ses
 
 from .postgres import PostgresCatalogReader
 from .read_model import (
+    CatalogKnowledgeResult,
     CatalogReactionDetail,
     CatalogReactionResult,
     CatalogSpeciesResult,
+    CatalogSpeciesThermochemistryContext,
     CatalogStructureEntry,
 )
 
@@ -54,6 +56,22 @@ class CatalogReader(Protocol):
     ) -> list[CatalogReactionResult]: ...
 
     def get_structure_entry(self, application_species_id: UUID) -> CatalogStructureEntry | None: ...
+
+    def search_knowledge(
+        self,
+        *,
+        knowledge_id: str | None = None,
+        source_package: str | None = None,
+        source_type: str | None = None,
+        linked_species_id: str | None = None,
+        linked_structure_id: str | None = None,
+        element_atomic_number: int | None = None,
+        limit: int = 50,
+    ) -> list[CatalogKnowledgeResult]: ...
+
+    def get_species_thermochemistry_context(
+        self, application_species_id: UUID
+    ) -> CatalogSpeciesThermochemistryContext | None: ...
 
 
 @lru_cache(maxsize=1)
@@ -140,6 +158,36 @@ def complete_species(
     )
 
 
+@router.get("/knowledge", response_model=list[CatalogKnowledgeResult])
+def search_knowledge(
+    reader: Annotated[CatalogReader, Depends(get_catalog_reader)],
+    knowledge_id: str | None = None,
+    source_package: str | None = None,
+    source_type: str | None = None,
+    linked_species_id: str | None = None,
+    linked_structure_id: str | None = None,
+    element_atomic_number: Annotated[int | None, Query(ge=1, le=118)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> list[CatalogKnowledgeResult]:
+    if (
+        sum(
+            value is not None
+            for value in (linked_species_id, linked_structure_id, element_atomic_number)
+        )
+        > 1
+    ):
+        raise HTTPException(status_code=422, detail="每次只支持一个 linked target filter")
+    return reader.search_knowledge(
+        knowledge_id=knowledge_id,
+        source_package=source_package,
+        source_type=source_type,
+        linked_species_id=linked_species_id,
+        linked_structure_id=linked_structure_id,
+        element_atomic_number=element_atomic_number,
+        limit=limit,
+    )
+
+
 @router.get("/reactions/{consolidated_id}", response_model=CatalogReactionResult)
 def get_reaction(
     consolidated_id: str,
@@ -171,3 +219,17 @@ def get_species_structure(
     if entry is None:
         raise HTTPException(status_code=404, detail="该物质没有可用结构")
     return entry
+
+
+@router.get(
+    "/species/{application_species_id}/thermochemistry",
+    response_model=CatalogSpeciesThermochemistryContext,
+)
+def get_species_thermochemistry(
+    application_species_id: UUID,
+    reader: Annotated[CatalogReader, Depends(get_catalog_reader)],
+) -> CatalogSpeciesThermochemistryContext:
+    context = reader.get_species_thermochemistry_context(application_species_id)
+    if context is None:
+        raise HTTPException(status_code=404, detail="该物质没有可用热化学上下文")
+    return context

@@ -8,23 +8,34 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .persistence import (
+    CatalogBondEnthalpyRow,
+    CatalogKnowledgeLinkRow,
     CatalogKnowledgeRecordRow,
+    CatalogPhaseTransitionRow,
     CatalogReactionParticipantRow,
     CatalogReactionRow,
     CatalogSourceAttributionRow,
+    CatalogSpeciesPhaseFactRow,
     CatalogSpeciesRow,
+    CatalogSpeciesThermochemistryRow,
     CatalogStructureLinkRow,
     CatalogStructureRecordRow,
     CatalogTeachingProjectionRow,
 )
 from .read_model import (
+    CatalogBondEnthalpyResult,
+    CatalogKnowledgeLinkResult,
     CatalogKnowledgeResult,
+    CatalogPhaseTransition,
     CatalogReactionDetail,
     CatalogReactionParticipantResult,
     CatalogReactionResult,
     CatalogRelatedSpeciesResult,
     CatalogSourceAttributionResult,
+    CatalogSpeciesPhaseFact,
     CatalogSpeciesResult,
+    CatalogSpeciesThermochemistry,
+    CatalogSpeciesThermochemistryContext,
     CatalogStructureEntry,
 )
 
@@ -78,6 +89,46 @@ def _equation_suitability(projection: CatalogTeachingProjectionRow, mode: str) -
 class PostgresCatalogReader:
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    def _source_results(self, source_refs: list[str]) -> list[CatalogSourceAttributionResult]:
+        rows = self._session.scalars(
+            select(CatalogSourceAttributionRow)
+            .where(CatalogSourceAttributionRow.source_ref.in_(source_refs))
+            .order_by(CatalogSourceAttributionRow.source_ref)
+        ).all()
+        return [CatalogSourceAttributionResult(name=row.name, url=row.url) for row in rows]
+
+    def _knowledge_result(self, row: CatalogKnowledgeRecordRow) -> CatalogKnowledgeResult:
+        link_rows = self._session.scalars(
+            select(CatalogKnowledgeLinkRow)
+            .where(CatalogKnowledgeLinkRow.source_knowledge_id == row.consolidated_id)
+            .order_by(CatalogKnowledgeLinkRow.link_id)
+        ).all()
+        return CatalogKnowledgeResult(
+            consolidated_id=row.consolidated_id,
+            application_id=row.application_id,
+            source_package=row.source_package,
+            source_id=row.source_id,
+            source_type=row.source_type,
+            display_name_zh=row.display_name_zh,
+            teaching_priority=row.teaching_priority,
+            content_zh=row.content_zh,
+            related_reaction_ids=list(row.related_reaction_ids),
+            related_species_ids=list(row.related_species_ids),
+            payload=dict(row.payload),
+            links=[
+                CatalogKnowledgeLinkResult(
+                    relation=link.relation,
+                    target_kind=link.target_kind,
+                    target_id=link.target_id,
+                    resolution_method=link.resolution_method,
+                    evidence_refs=list(link.evidence_refs),
+                )
+                for link in link_rows
+            ],
+            provenance_refs=list(row.provenance_refs),
+            sources=self._source_results(row.provenance_refs),
+        )
 
     def search_species(
         self,
@@ -211,12 +262,13 @@ class PostgresCatalogReader:
             if not selected_elements <= set(candidate):
                 continue
             exact_rank = 0 if candidate == composition else 1
-            deficit = sum(max(composition[element] - candidate[element], 0) for element in composition)
+            deficit = sum(
+                max(composition[element] - candidate[element], 0) for element in composition
+            )
             count_satisfaction_rank = 0 if deficit == 0 else 1
             extra_elements = len(set(candidate) - selected_elements)
             extra_atoms = sum(
-                max(count - composition.get(element, 0), 0)
-                for element, count in candidate.items()
+                max(count - composition.get(element, 0), 0) for element, count in candidate.items()
             )
             suitability_rank = (
                 SUITABILITY_RANK[_equation_suitability(projection, equation_mode)]
@@ -422,18 +474,148 @@ class PostgresCatalogReader:
                 row.consolidated_id,
             )
         )
-        return [
-            CatalogKnowledgeResult(
-                consolidated_id=row.consolidated_id,
-                application_id=row.application_id,
-                source_type=row.source_type,
-                display_name_zh=row.display_name_zh,
-                teaching_priority=row.teaching_priority,
-                content_zh=row.content_zh,
-                related_reaction_ids=list(row.related_reaction_ids),
-                related_species_ids=list(row.related_species_ids),
+        return [self._knowledge_result(row) for row in matched]
+
+    def search_knowledge(
+        self,
+        *,
+        knowledge_id: str | None = None,
+        source_package: str | None = None,
+        source_type: str | None = None,
+        linked_species_id: str | None = None,
+        linked_structure_id: str | None = None,
+        element_atomic_number: int | None = None,
+        limit: int = 50,
+    ) -> list[CatalogKnowledgeResult]:
+        if not 1 <= limit <= 100:
+            raise ValueError("knowledge result limit 必须在 1 到 100 之间")
+        statement = select(CatalogKnowledgeRecordRow)
+        if knowledge_id is not None:
+            statement = statement.where(CatalogKnowledgeRecordRow.consolidated_id == knowledge_id)
+        if source_package is not None:
+            statement = statement.where(CatalogKnowledgeRecordRow.source_package == source_package)
+        if source_type is not None:
+            statement = statement.where(CatalogKnowledgeRecordRow.source_type == source_type)
+
+        link_target: tuple[str, str] | None = None
+        if linked_species_id is not None:
+            link_target = ("species", linked_species_id)
+        elif linked_structure_id is not None:
+            link_target = ("structure", linked_structure_id)
+        elif element_atomic_number is not None:
+            link_target = ("element", f"element:{element_atomic_number}:")
+        if link_target is not None:
+            target_kind, target_id = link_target
+            statement = statement.join(
+                CatalogKnowledgeLinkRow,
+                CatalogKnowledgeLinkRow.source_knowledge_id
+                == CatalogKnowledgeRecordRow.consolidated_id,
+            ).where(CatalogKnowledgeLinkRow.target_kind == target_kind)
+            if target_kind == "element":
+                statement = statement.where(CatalogKnowledgeLinkRow.target_id.like(f"{target_id}%"))
+            else:
+                statement = statement.where(CatalogKnowledgeLinkRow.target_id == target_id)
+
+        rows = self._session.scalars(
+            statement.distinct()
+            .order_by(
+                CatalogKnowledgeRecordRow.teaching_priority,
+                CatalogKnowledgeRecordRow.source_type,
+                CatalogKnowledgeRecordRow.consolidated_id,
             )
-            for row in matched
+            .limit(limit)
+        ).all()
+        return [self._knowledge_result(row) for row in rows]
+
+    def get_species_thermochemistry_context(
+        self, application_species_id: UUID
+    ) -> CatalogSpeciesThermochemistryContext | None:
+        species = self._session.scalar(
+            select(CatalogSpeciesRow).where(
+                CatalogSpeciesRow.application_id == application_species_id
+            )
+        )
+        if species is None:
+            return None
+        fact = self._session.get(CatalogSpeciesPhaseFactRow, species.consolidated_id)
+        if fact is None:
+            return None
+        thermochemistry = self._session.scalars(
+            select(CatalogSpeciesThermochemistryRow)
+            .where(CatalogSpeciesThermochemistryRow.species_id == species.consolidated_id)
+            .order_by(
+                CatalogSpeciesThermochemistryRow.phase,
+                CatalogSpeciesThermochemistryRow.temperature_k,
+            )
+        ).all()
+        transitions = self._session.scalars(
+            select(CatalogPhaseTransitionRow)
+            .where(CatalogPhaseTransitionRow.species_id == species.consolidated_id)
+            .order_by(CatalogPhaseTransitionRow.transition_id)
+        ).all()
+        return CatalogSpeciesThermochemistryContext(
+            consolidated_species_id=species.consolidated_id,
+            application_species_id=species.application_id,
+            phase_fact=CatalogSpeciesPhaseFact(
+                standard_phase=fact.standard_phase,
+                allowed_teaching_phases=list(fact.allowed_teaching_phases),
+                thermochemistry_available_phases=list(fact.thermochemistry_available_phases),
+                phase_conditions=list(fact.phase_conditions),
+                reference_temperature_k=fact.reference_temperature_k,
+                standard_pressure_bar=fact.standard_pressure_bar,
+                source_refs=list(fact.source_refs),
+                sources=self._source_results(fact.source_refs),
+            ),
+            thermochemistry=[
+                CatalogSpeciesThermochemistry(
+                    phase=item.phase,
+                    temperature_k=item.temperature_k,
+                    standard_pressure_bar=item.standard_pressure_bar,
+                    delta_f_h_kj_mol=item.delta_f_h_kj_mol,
+                    delta_f_g_kj_mol=item.delta_f_g_kj_mol,
+                    s_j_mol_k=item.s_j_mol_k,
+                    cp_j_mol_k=item.cp_j_mol_k,
+                    method=item.method,
+                    source_refs=list(item.source_refs),
+                    sources=self._source_results(item.source_refs),
+                )
+                for item in thermochemistry
+            ],
+            phase_transitions=[
+                CatalogPhaseTransition(
+                    transition=item.transition,
+                    from_phase=item.from_phase,
+                    to_phase=item.to_phase,
+                    enthalpy_kj_mol=item.enthalpy_kj_mol,
+                    transition_temperature_k=item.transition_temperature_k,
+                    method=item.method,
+                    source_refs=list(item.source_refs),
+                    sources=self._source_results(item.source_refs),
+                )
+                for item in transitions
+            ],
+        )
+
+    def list_bond_enthalpies(self) -> list[CatalogBondEnthalpyResult]:
+        rows = self._session.scalars(
+            select(CatalogBondEnthalpyRow).order_by(CatalogBondEnthalpyRow.bond_enthalpy_id)
+        ).all()
+        return [
+            CatalogBondEnthalpyResult(
+                bond_enthalpy_id=row.bond_enthalpy_id,
+                atom1=row.atom1,
+                atom2=row.atom2,
+                bond_order=row.bond_order,
+                environment_key=row.environment_key,
+                enthalpy_kj_mol=row.enthalpy_kj_mol,
+                temperature_k=row.temperature_k,
+                phase_scope=row.phase_scope,
+                method=row.method,
+                qualifier=row.qualifier,
+                source_refs=list(row.source_refs),
+                sources=self._source_results(row.source_refs),
+            )
+            for row in rows
         ]
 
     def get_structure_entry(self, application_species_id: UUID) -> CatalogStructureEntry | None:

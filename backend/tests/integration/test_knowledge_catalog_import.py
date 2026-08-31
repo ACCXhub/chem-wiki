@@ -1,14 +1,16 @@
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine, func, select
+from sqlalchemy import Engine, create_engine, func, select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from chem_wiki.config import Settings
@@ -16,12 +18,18 @@ from chem_wiki.main import create_app
 from chem_wiki.modules.element_data import ElementDataBase, bootstrap_element_identities
 from chem_wiki.modules.element_wiki import PostgresElementWikiReader
 from chem_wiki.modules.knowledge_catalog import (
+    CatalogBondEnthalpyRow,
+    CatalogKnowledgeLinkRow,
     CatalogKnowledgeRecordRow,
+    CatalogPhaseTransitionRow,
     CatalogReactionParticipantRow,
     CatalogReactionRow,
+    CatalogReleaseRow,
     CatalogSourceAttributionRow,
     CatalogSourceCrosswalkRow,
+    CatalogSpeciesPhaseFactRow,
     CatalogSpeciesRow,
+    CatalogSpeciesThermochemistryRow,
     CatalogStructureLinkRow,
     CatalogStructureRecordRow,
     CatalogTeachingProjectionRow,
@@ -33,6 +41,7 @@ from chem_wiki.modules.reaction_core import ReactionParticipantRow, ReactionRow
 
 pytestmark = pytest.mark.integration
 BACKEND_ROOT = Path(__file__).parents[2]
+LEGACY_KNOWLEDGE_ID = "knowledge:inorganic:concept:concept:acid-base-indicator"
 
 
 @pytest.fixture(scope="module")
@@ -48,15 +57,57 @@ def consolidated_source() -> Path:
 
 @contextmanager
 def _migrated_engine() -> Iterator[Engine]:
+    original_url = Settings().database_url
+    database_url = make_url(original_url)
+    test_database = f"chem_wiki_phase3a_{uuid4().hex[:12]}"
+    admin_url = database_url.set(database="postgres")
+    admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
+    with admin_engine.connect() as connection:
+        connection.execute(text(f'CREATE DATABASE "{test_database}"'))
+
+    test_url = database_url.set(database=test_database)
+    os.environ["DATABASE_URL"] = test_url.render_as_string(hide_password=False)
     config = Config(str(BACKEND_ROOT / "alembic.ini"))
-    engine = create_engine(Settings().database_url)
-    command.downgrade(config, "base")
+    engine = create_engine(test_url)
+    command.upgrade(config, "20260829_05")
+    knowledge_namespace = uuid5(NAMESPACE_URL, "chem-wiki:knowledge-catalog:knowledge:v1")
+    with Session(engine) as session:
+        session.add(
+            CatalogReleaseRow(
+                release="consolidated-1.0.0",
+                repository="https://github.com/ACCXhub/chem-knowledge-data.git",
+                commit="c1bf05dd68c936cb0cedf8c6877bbac0f68025e9",
+                state="READY_FOR_APP_IMPORT",
+                manifest_sha256="0" * 64,
+                imported_at=datetime.now(UTC),
+            )
+        )
+        session.add(
+            CatalogKnowledgeRecordRow(
+                consolidated_id=LEGACY_KNOWLEDGE_ID,
+                application_id=uuid5(knowledge_namespace, LEGACY_KNOWLEDGE_ID),
+                source_package="inorganic",
+                source_id="concept:acid-base-indicator",
+                source_type="concept",
+                display_name_zh="酸碱指示剂",
+                teaching_priority="core",
+                content_zh="迁移前已导入内容",
+                related_reaction_ids=[],
+                related_species_ids=[],
+                payload={"review_status": "reviewed"},
+                provenance_refs=[],
+            )
+        )
+        session.commit()
     command.upgrade(config, "head")
     try:
         yield engine
     finally:
-        command.downgrade(config, "base")
         engine.dispose()
+        os.environ["DATABASE_URL"] = original_url
+        with admin_engine.connect() as connection:
+            connection.execute(text(f'DROP DATABASE "{test_database}" WITH (FORCE)'))
+        admin_engine.dispose()
 
 
 def _count(session: Session, row_type: type[object]) -> int:
@@ -82,16 +133,30 @@ def test_release_import_is_complete_idempotent_and_queryable(
         assert first.catalog_reactions_imported == 183
         assert first.m05_reactions_materialized == 175
         assert first.catalog_only_reactions == 8
-        assert first.knowledge_records_imported == 127
+        assert first.knowledge_records_imported == 637
+        assert first.knowledge_links_imported == 176
+        assert first.species_phase_facts_imported == 18
+        assert first.species_thermochemistry_imported == 20
+        assert first.phase_transitions_imported == 2
+        assert first.bond_enthalpies_imported == 14
         assert first.structure_records_imported == 69
-        assert first.source_attributions_imported == 7
+        assert first.source_attributions_imported == 16
+        assert _count(session, CatalogReleaseRow) == 2
+        assert session.get(CatalogKnowledgeRecordRow, LEGACY_KNOWLEDGE_ID).content_zh == (
+            "迁移前已导入内容"
+        )
         assert _count(session, CatalogSpeciesRow) == 309
         assert _count(session, CatalogSourceCrosswalkRow) == 309
-        assert _count(session, CatalogSourceAttributionRow) == 7
+        assert _count(session, CatalogSourceAttributionRow) == 16
         assert _count(session, CatalogTeachingProjectionRow) == 309
         assert _count(session, CatalogStructureLinkRow) == 69
         assert _count(session, CatalogStructureRecordRow) == 69
-        assert _count(session, CatalogKnowledgeRecordRow) == 127
+        assert _count(session, CatalogKnowledgeRecordRow) == 637
+        assert _count(session, CatalogKnowledgeLinkRow) == 176
+        assert _count(session, CatalogSpeciesPhaseFactRow) == 18
+        assert _count(session, CatalogSpeciesThermochemistryRow) == 20
+        assert _count(session, CatalogPhaseTransitionRow) == 2
+        assert _count(session, CatalogBondEnthalpyRow) == 14
         assert _count(session, CatalogReactionRow) == 183
         assert _count(session, ReactionRow) == 175
 
@@ -131,6 +196,9 @@ def test_release_import_is_complete_idempotent_and_queryable(
         assert _count(session, CatalogSpeciesRow) == 309
         assert _count(session, CatalogReactionRow) == 183
         assert _count(session, ReactionRow) == 175
+        assert _count(session, CatalogKnowledgeRecordRow) == 637
+        assert _count(session, CatalogKnowledgeLinkRow) == 176
+        assert _count(session, CatalogSpeciesThermochemistryRow) == 20
         assert (
             dict(
                 session.execute(
@@ -191,16 +259,54 @@ def test_release_import_is_complete_idempotent_and_queryable(
         assert len(reader.search_species(query="Fe", limit=1)) == 1
         assert len(reader.search_species(query="Fe", limit=20)) > 1
 
+        water = reader.search_species(query="H2O", entity_kind="substance", limit=5)[0]
+        water_knowledge = reader.search_knowledge(
+            source_package="structural_chemistry",
+            linked_species_id=water.consolidated_id,
+        )
+        assert water_knowledge
+        assert all(item.payload for item in water_knowledge)
+        assert any(item.links for item in water_knowledge)
+        assert any(item.sources for item in water_knowledge)
+        atomic_configurations = reader.search_knowledge(
+            source_package="structural_chemistry",
+            source_type="atomic_configuration",
+            element_atomic_number=1,
+        )
+        assert len(atomic_configurations) == 1
+        assert atomic_configurations[0].payload["symbol"] == "H"
+
+        water_thermochemistry = reader.get_species_thermochemistry_context(water.application_id)
+        assert water_thermochemistry is not None
+        assert water_thermochemistry.consolidated_species_id == water.consolidated_id
+        assert water_thermochemistry.phase_fact.standard_phase == "l"
+        assert {item.phase for item in water_thermochemistry.thermochemistry} == {"g", "l"}
+        assert len(water_thermochemistry.phase_transitions) == 2
+        assert all(
+            item.temperature_k and item.standard_pressure_bar
+            for item in water_thermochemistry.thermochemistry
+        )
+        assert all(item.sources for item in water_thermochemistry.thermochemistry)
+        assert all(
+            "cantera" in item.sources[0].name.casefold()
+            for item in water_thermochemistry.thermochemistry
+        )
+        bond_enthalpies = reader.list_bond_enthalpies()
+        assert len(bond_enthalpies) == 14
+        assert all(item.qualifier and item.sources for item in bond_enthalpies)
+
         strontium_completions = reader.complete_species(composition={"Sr": 1}, limit=20)
         assert len(strontium_completions) > 1
         assert all(item.entity_kind == "substance" for item in strontium_completions)
         assert all(item.composition and "Sr" in item.composition for item in strontium_completions)
-        assert reader.complete_species(
-            composition={"Sr": 1, "S": 1, "O": 4}, limit=20
-        )[0].formula == "SrSO4"
-        assert reader.complete_species(
-            composition={"Na": 2, "S": 1, "O": 4}, limit=20
-        )[0].formula == "Na2SO4"
+        assert (
+            reader.complete_species(composition={"Sr": 1, "S": 1, "O": 4}, limit=20)[0].formula
+            == "SrSO4"
+        )
+        assert (
+            reader.complete_species(composition={"Na": 2, "S": 1, "O": 4}, limit=20)[0].formula
+            == "Na2SO4"
+        )
         assert reader.complete_species(composition={"Xe": 99}, limit=20) == []
 
         detail = reader.get_reaction_detail("reaction:inorganic:reaction:agno3-nacl")
@@ -274,3 +380,22 @@ def test_release_import_is_complete_idempotent_and_queryable(
         assert detail_payload["phenomena"]
         assert detail_payload["relatedSpecies"]
         assert detail_payload["sources"]
+
+        knowledge_response = TestClient(create_app()).get(
+            "/v1/catalog/knowledge",
+            params={
+                "source_package": "structural_chemistry",
+                "linked_species_id": water.consolidated_id,
+            },
+        )
+        assert knowledge_response.status_code == 200
+        assert knowledge_response.json()
+
+        thermochemistry_response = TestClient(create_app()).get(
+            f"/v1/catalog/species/{water.application_id}/thermochemistry"
+        )
+        assert thermochemistry_response.status_code == 200
+        assert {item["phase"] for item in thermochemistry_response.json()["thermochemistry"]} == {
+            "g",
+            "l",
+        }

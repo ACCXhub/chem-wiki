@@ -3,14 +3,19 @@
 from .api import CatalogReader, get_catalog_reader
 from .importer import KnowledgeCatalogImportResult, import_consolidated_release
 from .persistence import (
+    CatalogBondEnthalpyRow,
+    CatalogKnowledgeLinkRow,
     CatalogKnowledgeRecordRow,
+    CatalogPhaseTransitionRow,
     CatalogReactionParticipantRow,
     CatalogReactionRow,
     CatalogReleaseArtifactRow,
     CatalogReleaseRow,
     CatalogSourceAttributionRow,
     CatalogSourceCrosswalkRow,
+    CatalogSpeciesPhaseFactRow,
     CatalogSpeciesRow,
+    CatalogSpeciesThermochemistryRow,
     CatalogStructureLinkRow,
     CatalogStructureRecordRow,
     CatalogTeachingProjectionRow,
@@ -18,13 +23,18 @@ from .persistence import (
 )
 from .postgres import PostgresCatalogReader
 from .read_model import (
+    CatalogBondEnthalpyResult,
+    CatalogKnowledgeLinkResult,
     CatalogKnowledgeResult,
     CatalogReactionDetail,
     CatalogReactionParticipantResult,
     CatalogReactionResult,
     CatalogRelatedSpeciesResult,
     CatalogSourceAttributionResult,
+    CatalogSpeciesPhaseFact,
     CatalogSpeciesResult,
+    CatalogSpeciesThermochemistry,
+    CatalogSpeciesThermochemistryContext,
     CatalogStructureEntry,
 )
 from .release import (
@@ -40,8 +50,13 @@ from .release import (
 
 __all__ = [
     "PINNED_RELEASE",
+    "CatalogBondEnthalpyResult",
+    "CatalogBondEnthalpyRow",
+    "CatalogKnowledgeLinkResult",
+    "CatalogKnowledgeLinkRow",
     "CatalogKnowledgeRecordRow",
     "CatalogKnowledgeResult",
+    "CatalogPhaseTransitionRow",
     "CatalogReactionDetail",
     "CatalogReactionParticipantResult",
     "CatalogReactionParticipantRow",
@@ -54,8 +69,13 @@ __all__ = [
     "CatalogSourceAttributionResult",
     "CatalogSourceAttributionRow",
     "CatalogSourceCrosswalkRow",
+    "CatalogSpeciesPhaseFact",
+    "CatalogSpeciesPhaseFactRow",
     "CatalogSpeciesResult",
     "CatalogSpeciesRow",
+    "CatalogSpeciesThermochemistry",
+    "CatalogSpeciesThermochemistryContext",
+    "CatalogSpeciesThermochemistryRow",
     "CatalogStructureEntry",
     "CatalogStructureLinkRow",
     "CatalogStructureRecordRow",

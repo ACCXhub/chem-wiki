@@ -33,14 +33,19 @@ from chem_wiki.modules.reaction_core import (
 )
 
 from .persistence import (
+    CatalogBondEnthalpyRow,
+    CatalogKnowledgeLinkRow,
     CatalogKnowledgeRecordRow,
+    CatalogPhaseTransitionRow,
     CatalogReactionParticipantRow,
     CatalogReactionRow,
     CatalogReleaseArtifactRow,
     CatalogReleaseRow,
     CatalogSourceAttributionRow,
     CatalogSourceCrosswalkRow,
+    CatalogSpeciesPhaseFactRow,
     CatalogSpeciesRow,
+    CatalogSpeciesThermochemistryRow,
     CatalogStructureLinkRow,
     CatalogStructureRecordRow,
     CatalogTeachingProjectionRow,
@@ -63,6 +68,11 @@ class KnowledgeCatalogImportResult:
     m05_reactions_materialized: int
     catalog_only_reactions: int
     knowledge_records_imported: int
+    knowledge_links_imported: int
+    species_phase_facts_imported: int
+    species_thermochemistry_imported: int
+    phase_transitions_imported: int
+    bond_enthalpies_imported: int
     structure_records_imported: int
     source_attributions_imported: int
 
@@ -172,33 +182,39 @@ def _import_crosswalks(session: Session, records: list[dict[str, Any]]) -> None:
 
 
 def _import_source_attributions(session: Session, release: VerifiedRelease) -> int:
-    registry_path = (
-        release.source_root / "packages" / "inorganic" / "sources" / "source_registry.json"
-    )
-    if not registry_path.is_file():
-        raise ValueError("pinned inorganic package 缺少 source registry")
-    payload = json.loads(registry_path.read_text(encoding="utf-8"))
-    sources = payload.get("sources")
-    if not isinstance(sources, list):
-        raise TypeError("pinned inorganic source registry 格式无效")
     imported = 0
-    for source in sources:
-        if not isinstance(source, dict):
-            continue
-        source_id = source.get("id")
-        name = source.get("name")
-        if not isinstance(source_id, str) or not isinstance(name, str):
-            continue
-        source_ref = f"inorganic:{source_id}"
-        if session.get(CatalogSourceAttributionRow, source_ref) is None:
-            session.add(
-                CatalogSourceAttributionRow(
-                    source_ref=source_ref,
-                    name=name,
-                    url=source.get("url") if isinstance(source.get("url"), str) else None,
+    registries = (
+        ("inorganic", "id", True),
+        ("structural_chemistry", "key", True),
+        ("thermochemistry", "key", False),
+    )
+    for package, id_field, namespace in registries:
+        registry_path = (
+            release.source_root / "packages" / package / "sources" / "source_registry.json"
+        )
+        if not registry_path.is_file():
+            raise ValueError(f"pinned {package} package 缺少 source registry")
+        payload = json.loads(registry_path.read_text(encoding="utf-8"))
+        sources = payload.get("sources")
+        if not isinstance(sources, list):
+            raise TypeError(f"pinned {package} source registry 格式无效")
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            source_id = source.get(id_field)
+            name = source.get("name")
+            if not isinstance(source_id, str) or not isinstance(name, str):
+                continue
+            source_ref = f"{package}:{source_id}" if namespace else source_id
+            if session.get(CatalogSourceAttributionRow, source_ref) is None:
+                session.add(
+                    CatalogSourceAttributionRow(
+                        source_ref=source_ref,
+                        name=name,
+                        url=source.get("url") if isinstance(source.get("url"), str) else None,
+                    )
                 )
-            )
-        imported += 1
+            imported += 1
     return imported
 
 
@@ -296,18 +312,12 @@ def _import_knowledge_records(session: Session, records: list[dict[str, Any]]) -
     for record in records:
         source_type = str(record["source_type"])
         payload = dict(record["payload"])
-        if (
-            source_type not in {"concept", "phenomenon"}
-            or payload.get("review_status") != "reviewed"
-        ):
-            continue
         consolidated_id = str(record["id"])
         if session.get(CatalogKnowledgeRecordRow, consolidated_id) is not None:
             imported += 1
             continue
         content = payload.get("definition_zh") or payload.get("observation_zh")
-        if not isinstance(content, str) or not content.strip():
-            continue
+        content_zh = content if isinstance(content, str) and content.strip() else None
         session.add(
             CatalogKnowledgeRecordRow(
                 consolidated_id=consolidated_id,
@@ -317,7 +327,7 @@ def _import_knowledge_records(session: Session, records: list[dict[str, Any]]) -
                 source_type=source_type,
                 display_name_zh=str(record["display_name_zh"]),
                 teaching_priority=str(record["teaching_priority"]),
-                content_zh=content,
+                content_zh=content_zh,
                 related_reaction_ids=list(payload.get("related_reaction_ids", [])),
                 related_species_ids=list(payload.get("related_species_ids", [])),
                 payload=payload,
@@ -326,6 +336,117 @@ def _import_knowledge_records(session: Session, records: list[dict[str, Any]]) -
         )
         imported += 1
     return imported
+
+
+def _import_knowledge_links(session: Session, records: list[dict[str, Any]]) -> int:
+    for record in records:
+        link_id = str(record["id"])
+        if session.get(CatalogKnowledgeLinkRow, link_id) is not None:
+            continue
+        session.add(
+            CatalogKnowledgeLinkRow(
+                link_id=link_id,
+                source_knowledge_id=str(record["source_knowledge_id"]),
+                relation=str(record["relation"]),
+                target_kind=str(record["target_kind"]),
+                target_id=str(record["target_id"]),
+                resolution_method=str(record["resolution_method"]),
+                evidence_refs=list(record["evidence_refs"]),
+            )
+        )
+    return len(records)
+
+
+def _decimal(value: object | None) -> Decimal | None:
+    return None if value is None else Decimal(str(value))
+
+
+def _import_thermochemistry(
+    session: Session,
+    phase_facts: list[dict[str, Any]],
+    species_thermochemistry: list[dict[str, Any]],
+    phase_transitions: list[dict[str, Any]],
+    bond_enthalpies: list[dict[str, Any]],
+) -> None:
+    for record in phase_facts:
+        species_id = str(record["species_id"])
+        if session.get(CatalogSpeciesPhaseFactRow, species_id) is not None:
+            continue
+        conditions = dict(record["reference_conditions"])
+        session.add(
+            CatalogSpeciesPhaseFactRow(
+                species_id=species_id,
+                phase_fact_id=str(record["id"]),
+                standard_phase=str(record["standard_phase"]),
+                allowed_teaching_phases=list(record["allowed_teaching_phases"]),
+                thermochemistry_available_phases=list(record["thermochemistry_available_phases"]),
+                phase_conditions=list(record["phase_conditions"]),
+                reference_temperature_k=Decimal(str(conditions["temperature_k"])),
+                standard_pressure_bar=Decimal(str(conditions["standard_pressure_bar"])),
+                source_refs=list(record["source_refs"]),
+                status=str(record["status"]),
+            )
+        )
+    for record in species_thermochemistry:
+        record_id = str(record["id"])
+        if session.get(CatalogSpeciesThermochemistryRow, record_id) is not None:
+            continue
+        session.add(
+            CatalogSpeciesThermochemistryRow(
+                thermochemistry_id=record_id,
+                species_id=str(record["species_id"]),
+                phase=str(record["phase"]),
+                temperature_k=Decimal(str(record["temperature_k"])),
+                standard_pressure_bar=Decimal(str(record["standard_pressure_bar"])),
+                delta_f_h_kj_mol=_decimal(record.get("delta_f_h_kj_mol")),
+                delta_f_g_kj_mol=_decimal(record.get("delta_f_g_kj_mol")),
+                s_j_mol_k=_decimal(record.get("s_j_mol_k")),
+                cp_j_mol_k=_decimal(record.get("cp_j_mol_k")),
+                method=str(record["method"]),
+                source_species_name=record.get("source_species_name"),
+                source_note=record.get("source_note"),
+                source_refs=list(record["source_refs"]),
+                status=str(record["status"]),
+            )
+        )
+    for record in phase_transitions:
+        record_id = str(record["id"])
+        if session.get(CatalogPhaseTransitionRow, record_id) is not None:
+            continue
+        session.add(
+            CatalogPhaseTransitionRow(
+                transition_id=record_id,
+                species_id=str(record["species_id"]),
+                transition=str(record["transition"]),
+                from_phase=str(record["from_phase"]),
+                to_phase=str(record["to_phase"]),
+                enthalpy_kj_mol=Decimal(str(record["enthalpy_kj_mol"])),
+                transition_temperature_k=Decimal(str(record["transition_temperature_k"])),
+                method=str(record["method"]),
+                source_refs=list(record["source_refs"]),
+                status=str(record["status"]),
+            )
+        )
+    for record in bond_enthalpies:
+        record_id = str(record["id"])
+        if session.get(CatalogBondEnthalpyRow, record_id) is not None:
+            continue
+        session.add(
+            CatalogBondEnthalpyRow(
+                bond_enthalpy_id=record_id,
+                atom1=str(record["atom1"]),
+                atom2=str(record["atom2"]),
+                bond_order=Decimal(str(record["bond_order"])),
+                environment_key=str(record["environment_key"]),
+                enthalpy_kj_mol=Decimal(str(record["enthalpy_kj_mol"])),
+                temperature_k=Decimal(str(record["temperature_k"])),
+                phase_scope=str(record["phase_scope"]),
+                method=str(record["method"]),
+                qualifier=str(record["qualifier"]),
+                source_refs=list(record["source_refs"]),
+                status=str(record["status"]),
+            )
+        )
 
 
 def _numeric_coefficient(value: object) -> Decimal | None:
@@ -499,6 +620,11 @@ def import_consolidated_release(
     reaction_records = _load_jsonl(release, "reactions.jsonl")
     teaching_records = _load_jsonl(release, "teaching_projection.jsonl")
     knowledge_records = _load_jsonl(release, "knowledge_records.jsonl")
+    knowledge_links = _load_jsonl(release, "knowledge_links.jsonl")
+    phase_facts = _load_jsonl(release, "species_phase_facts.jsonl")
+    species_thermochemistry = _load_jsonl(release, "species_thermochemistry.jsonl")
+    phase_transitions = _load_jsonl(release, "phase_transitions.jsonl")
+    bond_enthalpies = _load_jsonl(release, "bond_enthalpies.jsonl")
 
     _store_release(session, release)
     source_attribution_count = _import_source_attributions(session, release)
@@ -508,6 +634,14 @@ def import_consolidated_release(
     _import_structure_links(session, structure_link_records, species)
     structure_record_count = _import_structure_records(session, release)
     knowledge_record_count = _import_knowledge_records(session, knowledge_records)
+    knowledge_link_count = _import_knowledge_links(session, knowledge_links)
+    _import_thermochemistry(
+        session,
+        phase_facts,
+        species_thermochemistry,
+        phase_transitions,
+        bond_enthalpies,
+    )
     session.flush()
     materialized, catalog_only = _import_reactions(session, reaction_records, species)
     session.flush()
@@ -520,6 +654,11 @@ def import_consolidated_release(
         m05_reactions_materialized=materialized,
         catalog_only_reactions=catalog_only,
         knowledge_records_imported=knowledge_record_count,
+        knowledge_links_imported=knowledge_link_count,
+        species_phase_facts_imported=len(phase_facts),
+        species_thermochemistry_imported=len(species_thermochemistry),
+        phase_transitions_imported=len(phase_transitions),
+        bond_enthalpies_imported=len(bond_enthalpies),
         structure_records_imported=structure_record_count,
         source_attributions_imported=source_attribution_count,
     )
