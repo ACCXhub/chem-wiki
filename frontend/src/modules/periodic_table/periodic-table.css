@@ -280,6 +280,29 @@
   background: repeating-linear-gradient(135deg, var(--surface-muted) 0 5px, var(--surface-subtle) 5px 10px);
 }
 
+:root:not([data-theme='dark']) .heatmap-cell {
+  border-color: hsl(calc(166 - var(--heat) * 126) 48% 43% / 0.58);
+  background: linear-gradient(
+    145deg,
+    hsl(calc(166 - var(--heat) * 126) 58% calc(94% - var(--heat) * 8%)),
+    var(--surface)
+  );
+}
+
+:root:not([data-theme='dark']) .heatmap-cell .atomic-number,
+:root:not([data-theme='dark']) .heatmap-cell .element-name,
+:root:not([data-theme='dark']) .heatmap-cell .cell-value {
+  color: var(--text-secondary);
+}
+
+:root:not([data-theme='dark']) .heatmap-cell .cell-value {
+  font-weight: 700;
+}
+
+:root:not([data-theme='dark']) .hero-stat strong {
+  color: var(--accent-strong);
+}
+
 .category-alkali-metal { --category-color: #e5a65a; }
 .category-alkaline-earth-metal { --category-color: #d2c06a; }
 .category-transition-metal { --category-color: #64a9a0; }
@@ -330,6 +353,11 @@
   height: 0.5rem;
   border-radius: 1rem;
   background: linear-gradient(90deg, #287b69, #d4b659, #d06b49);
+}
+
+:root:not([data-theme='dark']) .heat-scale {
+  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
+  background: linear-gradient(90deg, #d8eee6, #f2e5b9, #edc8b6);
 }
 
 .heat-legend strong {

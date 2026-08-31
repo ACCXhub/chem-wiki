@@ -110,6 +110,8 @@
 .structure-3d-frame { border-color: var(--border-strong); background: var(--surface-subtle); }
 .structure-formula { border-left-color: var(--accent-warm); background: color-mix(in srgb, var(--accent-warm) 12%, var(--surface-muted)); }
 .structure-formula strong, .functional-groups button em { color: var(--accent-warm); }
+:root:not([data-theme='dark']) .structure-formula strong,
+:root:not([data-theme='dark']) .functional-groups button em { color: var(--formula-text-strong); }
 .functional-groups > button:hover, .functional-groups > button:focus-visible { border-color: var(--accent-warm); background: var(--control-hover); }
 .structure-boundary { border-color: var(--border-strong); }
 .structure-boundary strong, .structure-descriptors dd { color: var(--text-primary); }

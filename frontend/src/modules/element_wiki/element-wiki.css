@@ -463,6 +463,8 @@
 .wiki-properties article, .wiki-sections > article, .graph-selection { background: var(--surface-muted); }
 .wiki-properties article.is-missing { background: repeating-linear-gradient(135deg, var(--surface-muted) 0 8px, var(--surface-subtle) 8px 16px); }
 .wiki-properties strong, .wiki-node-list button:hover strong { color: var(--accent-warm); }
+:root:not([data-theme='dark']) .wiki-properties strong,
+:root:not([data-theme='dark']) .wiki-node-list button:hover strong { color: var(--accent-strong); }
 .graph-canvas { border-color: var(--border-strong); background: radial-gradient(circle, color-mix(in srgb, var(--accent) 16%, transparent), transparent 65%); }
 .graph-selection button { border-color: var(--border-strong); color: var(--text-primary); background: var(--control-bg); }
 .graph-center { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 20%, var(--surface-muted)); }

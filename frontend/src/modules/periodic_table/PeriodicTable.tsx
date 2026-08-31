@@ -294,8 +294,8 @@ export function PeriodicTableView({
             ) : (
               <div className="heat-legend">
                 <span>暂无数据：斜线</span>
-                <div className="heat-scale" aria-hidden="true" />
                 <span>低</span>
+                <div className="heat-scale" aria-hidden="true" />
                 <span>高</span>
                 <strong>
                   单位：{mode === 'electronegativity' ? 'Pauling' : 'eV'}

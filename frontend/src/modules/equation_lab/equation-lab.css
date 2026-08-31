@@ -358,6 +358,29 @@
 .draft-participant > span, .phase-selector button, .reaction-learning-item p, .reaction-species-item button, .manual-equation-input input, .name-display-toggle, .palette-mode-switch button, .builder-source-switch button, .builder-blocks button, .tray-count button { color: var(--text-secondary); }
 .manual-equation-input, .species-block, .advanced-equation-input input { border-color: var(--border); background: var(--surface-subtle); }
 .manual-equation-input input, .advanced-equation-input input { color: var(--text-primary); }
+:root:not([data-theme='dark']) .species-search input,
+:root:not([data-theme='dark']) .manual-equation-input > button,
+:root:not([data-theme='dark']) .species-placement button,
+:root:not([data-theme='dark']) .lab-examples button { border-color: var(--border-strong); color: var(--text-secondary); background: var(--input-bg); }
+:root:not([data-theme='dark']) .manual-equation-input > button:hover,
+:root:not([data-theme='dark']) .species-placement button:hover,
+:root:not([data-theme='dark']) .lab-examples button:hover { border-color: var(--accent); color: var(--text-primary); background: var(--control-hover); }
+:root:not([data-theme='dark']) .copy-equation,
+:root:not([data-theme='dark']) .history-button,
+:root:not([data-theme='dark']) .manual-input-toggle,
+:root:not([data-theme='dark']) .name-display-toggle,
+:root:not([data-theme='dark']) .category-nav button { border-color: var(--border-strong); }
+:root:not([data-theme='dark']) .participant-coefficient,
+:root:not([data-theme='dark']) .draft-participant > .chem-notation,
+:root:not([data-theme='dark']) .settled-equation,
+:root:not([data-theme='dark']) .focused-reaction-summary > .chem-equation,
+:root:not([data-theme='dark']) .reaction-species-item > span .chem-notation,
+:root:not([data-theme='dark']) .species-block > .chem-notation,
+:root:not([data-theme='dark']) .builder-blocks .chem-notation,
+:root:not([data-theme='dark']) .tray-entry > .chem-notation,
+:root:not([data-theme='dark']) .formatted-equation { color: var(--formula-text); }
+:root:not([data-theme='dark']) .settled-equation > .chem-equation,
+:root:not([data-theme='dark']) .formatted-equation { color: var(--formula-text-strong); }
 .settled-equation:hover, .settled-equation:focus-visible { background: color-mix(in srgb, var(--accent-warm) 12%, var(--surface)); }
 .reaction-candidate.is-central, .palette-mode-switch button[aria-pressed='true'], .builder-source-switch button[aria-pressed='true'], .category-nav button[aria-pressed='true'] { background: color-mix(in srgb, var(--accent-warm) 16%, var(--surface-muted)); }
 .reaction-candidate-state.is-error, .catalog-state.is-error, .reaction-detail-state.is-error { color: var(--danger); }
