@@ -101,17 +101,6 @@ These projects are candidates for specific gaps, not dependencies to install by 
 
 Projects with substantial overlap with existing owners, such as a second molecule editor or second general structure engine, are not added merely because they appear in an ecosystem list.
 
-## Skill strategy
-
-Project-specific custom Codex skills stay deliberately small:
-
-- `task-anchor` — iterative Outcome/Master/Locked/Delta/Deliverables continuity;
-- `convergent-editing` — one canonical current repository/artifact state;
-- `compact-product-ui` — dense, polished learner-facing product UI;
-- `integration-first` — repository/dependency/data/OSS audit before new capability work.
-
-Debugging, TDD, verification, React performance and similar framework skills are used from the system/framework when relevant rather than copied into the project skill repository.
-
 ## Phase 1 — Product integration reset（已实现）
 
 **Goal:** make the existing data foundation visible through a complete Element exploration loop.

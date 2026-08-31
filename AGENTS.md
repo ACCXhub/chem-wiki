@@ -1,31 +1,39 @@
-# Chem Wiki 项目规则
+# Chem Wiki Agent Entry
 
-- 每次只完成一个模块或一个连贯特性的闭环。由对应物理模块或子模块拥有其职责，改动保持局部。
-- 仅在多个调用方已经产生真实、稳定的复用需求后，才将能力提升到 `shared`、`common` 或类似层。
-- 保持已冻结契约和各模块公共边界。跨模块只依赖模块公开入口，不直连其内部文件、私有 helper、来源格式或存储细节。
-- 每轮迭代使用 `task-anchor` 维持 Outcome、Master、Locked、Delta 和 Deliverables；涉及规范 owner、清理、替换或收敛时使用 `convergent-editing`，保持一个 canonical 当前状态。
-- 新增子系统、依赖、数据管线、编辑器、渲染器、图谱或计算能力前使用 `integration-first`：先检查仓库现有 owner、已安装依赖、已有数据投影和成熟开源方案，再实现真正剩余的产品特定能力。
-- OSS 目录或 awesome list 只用于发现候选；采用前以候选项目当前 upstream 为准核对维护状态、许可证、运行/包体成本、安全性和与现有 owner 的重叠。chemistry OSS 的当前选型状态由 `docs/PRODUCT_ROADMAP.md` 统一拥有。
-- 产品 UI、布局密度、响应式和视觉层级调整使用 `compact-product-ui`。学习者界面优先展示化学内容、操作和有意义状态，工程 milestone、数据库/owner 术语与开发边界留在工程文档。
-- 遇到失败先按 systematic debugging 收集证据、定位根因，再实施修复。新增行为适用时使用 TDD；宣告完成前执行新鲜验证。
-- 验证从最聚焦、最相关的检查开始，仅在风险或依赖关系需要时扩大回归范围。提交应表达有意义的完整变更，不为每个微小 TDD 步骤单独提交。
-- 高风险架构变更需要更严格的设计与审查；低风险、强相关工作应合并处理，避免低价值的 token 与流程成本。
-- 成熟开源能力置于清晰的 Module、Port、Adapter 边界之后并保持可替换。第三方工具负责渲染、编辑、布局或计算，不接管 canonical chemistry truth。
-- 同一职责保持一个成熟工具 owner。当前结构能力继续以 Ketcher、RDKit、3Dmol.js 为主，不建立功能重叠的第二套编辑器、化学计算引擎或 3D viewer，除非出现明确且无法覆盖的真实需求。
-- 数据流保持 `chem-knowledge-data consolidated → knowledge_catalog / element_data → module read model → React`。前端不建立平行化学事实库。
-- 产品开发优先形成可连续探索的用户闭环，而不是增加孤立 demo 页面。当前 canonical 产品方向见 `docs/PRODUCT_ROADMAP.md`。
-- 不创建推测性抽象，不做无关重构。除非确有必要，不额外创建仓库副本、持久 worktree 或分散在桌面的产物。
-- 文档只描述当前 canonical 状态；直接更新 `README.md`、`docs/PRODUCT_ROADMAP.md`、对应 handoff/decision owner，不累积纠正记录或历史叙述。
+本文件只定义 Chem Wiki 的稳定架构与领域边界。通用代理行为、验证纪律、任务状态和条件式 Skill 的调用由用户级 `AGENTS.md` 与已安装 Skill 拥有；不要在仓库内复制它们。
 
-## Codex Skills
+## 模块边界
 
-自定义 Skill 的 canonical upstream 为 `ACCXhub/codex-skills`，用户级安装目录通常为 `%USERPROFILE%\.codex\skills\`。
+- 一轮只闭环一个模块或一项连贯能力。跨模块只依赖包的公共入口，不直连内部文件、私有 helper、外部来源格式或存储细节；`backend/src/chem_wiki/main.py` 是 FastAPI composition root。
+- 共享层只承载已有多个同级模块稳定复用的职责。不要为预期需求建立 `shared`、`common`、泛型 repository/service 或平行数据模型。
+- 第三方库放在拥有它的 Module/Port/Adapter 后。它们可负责编辑、渲染、布局或计算，不拥有化学真值。
+- 事实流固定为 `chem-knowledge-data consolidated → knowledge_catalog / element_data → module read model → React`。前端和 Lab 不维护第二套化学事实。
 
-chem-wiki 的项目自定义 Skill 集合固定为：
+## 化学真值与产品 owner
 
-- `task-anchor`
-- `convergent-editing`
-- `compact-product-ui`
-- `integration-first`
+| 责任 | Canonical owner | 消费边界 |
+| --- | --- | --- |
+| 冻结领域 identity、`Element`、`Ion`、`Substance`、`Structure`、`FunctionalGroup`、`Reaction` | `chemistry_core`；详见 `docs/decisions/M01-chemistry-core-boundary.md` | 模块公共 DTO/Port；不泄露 ORM、Pydantic 或化学库类型 |
+| 元素身份、已发布属性与字段级 provenance | `element_data`；详见 `docs/decisions/M02-element-persistence-contract.md` | `periodic_table`、`element_wiki` read model |
+| release-backed 物质/离子、来源 crosswalk、教学投影 | `knowledge_catalog` | Catalog API/read model；`catalog_species.application_id` 映射到 M01 typed identity |
+| accepted Structure record 与 species link | `knowledge_catalog` | Structure Lab 从 accepted entry 进入同一分析边界 |
+| 结构解析、派生描述符与 FunctionalGroup identity/detection | `structure_lab` | RDKit 位于 adapter 后；Ketcher/3Dmol.js 仅为前端工具 |
+| 已发布 Reaction 聚合、参与者、条件、现象与配平 | `reaction_core`；详见 `docs/handoffs/M05.md` | `POST /v1/reactions/balance` 与公开模块入口 |
+| released Reaction catalog、generic knowledge records/links、phase facts、thermochemistry、bond enthalpy | `knowledge_catalog` | read projection；不由 React、Equation Lab 或 Reaction Builder 推断/改写 |
+| EquationDraft 的编辑历史与方程交互 | `frontend/src/modules/equation_lab/` | 通过 Catalog 与 M05 API；Draft 不是 Reaction 或物质真值 |
+| 已知 Reaction 候选、排序与短暂选择 | `reaction_builder` | 读取 Catalog/M05 投影；不复制 Reaction 真值 |
 
-开始相关任务时确保这四个本地副本与 upstream 当前版本一致。删除本地已经被这些 Skill 取代的旧名、重复或过时自定义副本；保留与其他项目有关的独立 Skill。系统/框架提供的 debugging、TDD、verification、React、planning 等 Skill 按任务需要调用，不复制成项目私有重复版本。
+保持 `Reaction` 为一等聚合。Atom Mapping、Bond Diff/Bond Change 与 reviewed Mechanism 是彼此独立的未来边界，不能由配平或公式推断替代。学习者界面展示化学内容、操作和有意义状态；工程 owner、数据库和 milestone 术语留在工程文档。
+
+## 文档与恢复
+
+- `README.md`：当前产品入口和本地运行。
+- `docs/PRODUCT_ROADMAP.md`：产品方向、阶段与 chemistry OSS 选型；新增能力先核对现有 owner、依赖、数据投影与当前 upstream。
+- `docs/decisions/`：冻结且长期有效的窄架构决策。
+- `docs/handoffs/Mxx.md`：模块能力、公开边界、验证和恢复状态；当前 catalog/release 状态以 `M06-CATALOG.md` 为准。
+
+更新已有 owner，不为同一规则另建说明或历史纠正记录。历史恢复由 Git 和 Mxx handoff 承担。
+
+## Skills
+
+本仓库没有 repo-local Skill。需要时使用用户级已安装的条件式 Skill：迭代产物用 `task-anchor`，收敛/替换用 `convergent-editing`，产品 UI 用 `compact-product-ui`，新增能力或依赖用 `integration-first`。调试、TDD、验证、React、规划和审查继续使用其已有系统/框架 owner。
