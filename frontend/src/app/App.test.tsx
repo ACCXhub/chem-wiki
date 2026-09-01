@@ -1,6 +1,19 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
+
+beforeEach(() => {
+  vi.stubGlobal('matchMedia', (media: string) => ({
+    matches: false,
+    media,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }))
+})
 
 afterEach(() => {
   window.history.replaceState(null, '', '/')

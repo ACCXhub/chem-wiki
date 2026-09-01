@@ -10,9 +10,10 @@ import {
   type ReactNode,
 } from 'react'
 
-import { analyzeStructure, loadCatalogStructure } from './api'
+import { analyzeStructure, loadStructureExploration } from './api'
 import type {
   AnalyzeStructureResponse,
+  CatalogStructureExploration,
   MoleculeViewer3DProps,
   StructureEditorProps,
   StructureInputFormat,
@@ -25,6 +26,7 @@ const LazyMoleculeViewer3D = lazy(() => import('./adapters/MoleculeViewer3D'))
 
 interface StructureLabProps {
   onBack: () => void
+  onNavigate?: (path: string) => void
   speciesId?: string | null
 }
 
@@ -36,6 +38,7 @@ interface StructureLabViewProps extends StructureLabProps {
   EditorComponent?: ComponentType<StructureEditorProps>
   Viewer3DComponent?: ComponentType<MoleculeViewer3DProps>
   initialSmiles?: string | null
+  catalogExploration?: CatalogStructureExploration | null
 }
 
 interface AdapterErrorBoundaryProps {
@@ -75,15 +78,43 @@ function formulaWithSubscripts(formula: string): string {
   return formula.replace(/\d/g, (digit) => subscripts[digit])
 }
 
+const GROUP_LEARNING_MEANING: Record<string, string> = {
+  alkene: '碳碳双键是烯烃的特征结构。',
+  alkyne: '碳碳三键是炔烃的特征结构。',
+}
+
+function structuralKnowledgeFacts(payload: Record<string, unknown>): string[] {
+  const geometry: Record<string, string> = {
+    tetrahedral: '正四面体',
+    planar_molecule: '平面分子',
+    linear: '直线形',
+  }
+  const facts: string[] = []
+  if (typeof payload.molecular_geometry === 'string' && geometry[payload.molecular_geometry]) {
+    facts.push(geometry[payload.molecular_geometry])
+  }
+  if (typeof payload.central_hybridization_model === 'string') {
+    facts.push(`${payload.central_hybridization_model.replace('sp2', 'sp²').replace('sp3', 'sp³')} 杂化`)
+  }
+  if (typeof payload.representative_bond_angle_deg === 'number') {
+    facts.push(`键角约 ${payload.representative_bond_angle_deg}°`)
+  }
+  if (typeof payload.sigma_bond_count === 'number') facts.push(`${payload.sigma_bond_count} 个 σ 键`)
+  if (typeof payload.pi_bond_count === 'number') facts.push(`${payload.pi_bond_count} 个 π 键`)
+  return facts
+}
+
 export function StructureLabView({
   onBack,
+  onNavigate,
   onAnalyze,
   EditorComponent = LazyKetcherEditor,
   Viewer3DComponent = LazyMoleculeViewer3D,
   initialSmiles = null,
+  catalogExploration = null,
 }: StructureLabViewProps) {
   const [text, setText] = useState(initialSmiles ?? EXAMPLES[0].text)
-  const [label, setLabel] = useState(initialSmiles ? '目录物质' : EXAMPLES[0].label)
+  const [label, setLabel] = useState(catalogExploration?.species.nameZh ?? (initialSmiles ? '目录物质' : EXAMPLES[0].label))
   const [result, setResult] = useState<AnalyzeStructureResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editorError, setEditorError] = useState<string | null>(null)
@@ -102,6 +133,24 @@ export function StructureLabView({
     const selected = new Set(highlightedAtoms)
     return result.depiction.atomCoordinates.filter((atom) => selected.has(atom.atomIndex))
   }, [highlightedAtoms, result])
+
+  if (catalogExploration && !catalogExploration.structure) {
+    return (
+      <main className="structure-lab-page">
+        <nav className="structure-breadcrumb" aria-label="面包屑导航">
+          <button type="button" onClick={onBack}>元素周期表</button><span aria-hidden="true">/</span><span>结构实验室</span>
+        </nav>
+        <section className="structure-unavailable" aria-labelledby="unavailable-title">
+          <span>目录物质</span>
+          <h1 id="unavailable-title">{catalogExploration.species.nameZh}</h1>
+          <p>{formulaWithSubscripts(catalogExploration.species.formula)}</p>
+          <strong>暂无可用的已确认结构</strong>
+          <small>可在结构实验室中继续分析你自己的 SMILES 或 molblock。</small>
+          {onNavigate ? <button type="button" onClick={() => onNavigate('/structure-lab')}>打开自由结构分析</button> : null}
+        </section>
+      </main>
+    )
+  }
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -144,6 +193,32 @@ export function StructureLabView({
           <span>2D</span><i>↔</i><span>3D</span>
         </div>
       </header>
+
+      {catalogExploration ? (
+        <section className="structure-catalog-context" aria-labelledby="catalog-species-heading">
+          <div className="structure-catalog-title">
+            <span>目录物质</span>
+            <h2 id="catalog-species-heading">{catalogExploration.species.nameZh}</h2>
+            {catalogExploration.species.nameEn ? <small>{catalogExploration.species.nameEn}</small> : null}
+            <strong>{formulaWithSubscripts(catalogExploration.species.formula)}</strong>
+          </div>
+          <div className="structure-catalog-learning">
+            {catalogExploration.knowledge.flatMap((item) => {
+              const facts = structuralKnowledgeFacts(item.payload)
+              return facts.length ? [<p key={item.consolidatedId}><span>结构要点</span>{facts.join(' · ')}</p>] : []
+            })}
+          </div>
+          <div className="structure-catalog-links">
+            {catalogExploration.relatedSpecies.length ? (
+              <div><span>相关物质</span>{catalogExploration.relatedSpecies.map((species) => <button key={species.applicationId} type="button" onClick={() => onNavigate?.(`/structure-lab?species=${encodeURIComponent(species.applicationId)}`)} disabled={!species.structureAvailable}>{species.nameZh}</button>)}</div>
+            ) : null}
+            <div>
+              <span>相关反应</span>
+              {catalogExploration.relatedReactions.length ? catalogExploration.relatedReactions.map((reaction) => <button key={reaction.consolidatedId} type="button" aria-label={`在方程实验室中查看${reaction.nameZh}`} onClick={() => onNavigate?.(`/equation-lab?reaction=${encodeURIComponent(reaction.consolidatedId)}`)}>{reaction.nameZh}</button>) : <small>当前目录中暂无可继续查看的真实反应。</small>}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <div className="structure-workspace">
         <section className="structure-panel structure-editor-panel" aria-labelledby="editor-heading">
@@ -263,9 +338,10 @@ export function StructureLabView({
                       onBlur={() => setHighlightedAtoms([])}
                       aria-label={`${group.nameZh}，${group.occurrences.length} 处`}
                     >
-                      <span><strong>{group.nameZh}</strong><small>{group.nameEn}</small></span>
-                      <em>{group.occurrences.length} 处</em>
-                    </button>
+                  <span><strong>{group.nameZh}</strong><small>{group.nameEn}</small></span>
+                  <em>{group.occurrences.length} 处</em>
+                  {GROUP_LEARNING_MEANING[group.key] ? <p>{GROUP_LEARNING_MEANING[group.key]}</p> : null}
+                </button>
                   )
                 }) : <p className="structure-no-groups">当前课程目录未匹配到官能团。</p>}
               </div>
@@ -283,30 +359,23 @@ export function StructureLabView({
   )
 }
 
-export default function StructureLab({ onBack, speciesId }: StructureLabProps) {
-  const [knownSmiles, setKnownSmiles] = useState<string | null>(null)
+export default function StructureLab({ onBack, onNavigate, speciesId }: StructureLabProps) {
+  const [catalogExploration, setCatalogExploration] = useState<CatalogStructureExploration | null | undefined>(speciesId ? undefined : null)
   const [entryError, setEntryError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!speciesId) return
     let active = true
-    void loadCatalogStructure(speciesId).then((entry) => {
-      if (active) setKnownSmiles(entry.isomericSmiles ?? entry.canonicalSmiles)
+    void loadStructureExploration(speciesId).then((entry) => {
+      if (active) setCatalogExploration(entry)
     }).catch((reason: unknown) => {
       if (active) setEntryError(reason instanceof Error ? reason.message : '已知结构加载失败')
     })
     return () => { active = false }
   }, [speciesId])
 
-  return (
-    <>
-      {entryError ? <div className="structure-entry-error" role="alert">{entryError}</div> : null}
-      <StructureLabView
-        key={knownSmiles ?? 'manual'}
-        onBack={onBack}
-        onAnalyze={analyzeStructure}
-        initialSmiles={knownSmiles}
-      />
-    </>
-  )
+  if (speciesId && catalogExploration === undefined && !entryError) return <main className="structure-lab-page structure-entry-state" role="status">正在载入目录物质…</main>
+  if (speciesId && entryError) return <main className="structure-lab-page structure-entry-state" role="alert">{entryError}</main>
+  const knownSmiles = catalogExploration?.structure?.isomericSmiles ?? catalogExploration?.structure?.canonicalSmiles ?? null
+  return <StructureLabView key={speciesId ?? 'manual'} onBack={onBack} onNavigate={onNavigate} onAnalyze={analyzeStructure} initialSmiles={knownSmiles} catalogExploration={catalogExploration} />
 }

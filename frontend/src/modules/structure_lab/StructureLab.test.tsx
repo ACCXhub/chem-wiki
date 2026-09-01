@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
 
 import { StructureLabView } from './StructureLab'
-import type { AnalyzeStructureResponse } from './types'
+import type { AnalyzeStructureResponse, CatalogStructureExploration } from './types'
 
 
 const validResult: AnalyzeStructureResponse = {
@@ -153,4 +153,93 @@ test('isolates a failed chemistry editor and keeps the SMILES fallback usable', 
   )
   expect(screen.getByLabelText('SMILES')).toBeEnabled()
   consoleError.mockRestore()
+})
+
+test('presents catalog-linked ethene as a structure learning loop with its real reaction', async () => {
+  const onNavigate = vi.fn()
+  const etheneResult: AnalyzeStructureResponse = {
+    ...validResult,
+    canonicalSmiles: 'C=C',
+    formula: 'C2H4',
+    functionalGroups: [{
+      ...validResult.functionalGroups[0],
+      key: 'alkene',
+      nameZh: '碳碳双键',
+      nameEn: 'alkene',
+    }],
+  }
+  const catalogExploration: CatalogStructureExploration = {
+    species: {
+      consolidatedId: 'species:ethene', applicationId: 'ethene', entityKind: 'substance',
+      nameZh: '乙烯', nameEn: 'ethene', formula: 'C2H4', charge: 0,
+      composition: { C: 2, H: 4 }, aliases: [], chemicalClassifications: ['alkene'],
+      primaryCategory: 'organic', tags: [], defaultPriority: 'core', defaultPaletteRank: 1,
+      equationModes: { molecular: 'recommended', ionic: 'deemphasized', netIonic: 'deemphasized' },
+    },
+    structure: {
+      applicationSpeciesId: 'ethene', publishedStructureId: 'structure:ethene', structureScope: 'molecule',
+      canonicalSmiles: 'C=C', isomericSmiles: 'C=C', molecularFormula: 'C2H4', formalCharge: 0,
+    },
+    knowledge: [{
+      consolidatedId: 'knowledge:ethene', sourceType: 'molecular_example', displayNameZh: '乙烯', contentZh: null,
+      payload: { molecular_geometry: 'planar_molecule', central_hybridization_model: 'sp2', representative_bond_angle_deg: 120 },
+    }],
+    relatedSpecies: [{
+      consolidatedId: 'species:ethane', applicationId: 'ethane', entityKind: 'substance',
+      nameZh: '乙烷', nameEn: 'ethane', formula: 'C2H6', charge: 0,
+      composition: { C: 2, H: 6 }, aliases: [], chemicalClassifications: ['alkane'],
+      primaryCategory: 'organic', tags: [], defaultPriority: 'core', defaultPaletteRank: 2,
+      equationModes: { molecular: 'recommended', ionic: 'deemphasized', netIonic: 'deemphasized' },
+      structureAvailable: true,
+    }],
+    relatedReactions: [{
+      consolidatedId: 'reaction:ethene-hydrogenation', nameZh: '乙烯催化加氢', materializationState: 'materialized', reactionTypes: ['addition'],
+      conditions: ['催化剂'], equation: 'C2H4 + H2 -> C2H6',
+    }],
+  }
+
+  render(
+    <StructureLabView
+      onBack={() => undefined}
+      onNavigate={onNavigate}
+      onAnalyze={() => Promise.resolve(etheneResult)}
+      initialSmiles="C=C"
+      catalogExploration={catalogExploration}
+      EditorComponent={({ value, onChange }) => <textarea aria-label="结构编辑器" value={value} onChange={(event) => onChange(event.target.value)} />}
+      Viewer3DComponent={() => <div>3D model</div>}
+    />,
+  )
+
+  expect(await screen.findByRole('heading', { name: '乙烯' })).toBeInTheDocument()
+  expect(screen.getByText('碳碳双键是烯烃的特征结构。')).toBeInTheDocument()
+  expect(screen.getByText(/平面分子/)).toBeInTheDocument()
+  expect(screen.getByText(/sp² 杂化/)).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '在方程实验室中查看乙烯催化加氢' }))
+  expect(onNavigate).toHaveBeenCalledWith('/equation-lab?reaction=reaction%3Aethene-hydrogenation')
+})
+
+test('keeps a catalog species without an accepted structure out of the free-form result view', () => {
+  const onAnalyze = vi.fn(() => Promise.resolve(validResult))
+  render(
+    <StructureLabView
+      onBack={() => undefined}
+      onAnalyze={onAnalyze}
+      catalogExploration={{
+        species: {
+          consolidatedId: 'species:aluminium-nitrate', applicationId: 'aluminium-nitrate', entityKind: 'substance',
+          nameZh: '硝酸铝', nameEn: null, formula: 'Al(NO3)3', charge: 0, composition: null, aliases: [], chemicalClassifications: ['salt'],
+          primaryCategory: 'salt', tags: [], defaultPriority: 'common', defaultPaletteRank: 1,
+          equationModes: { molecular: 'available', ionic: 'available', netIonic: 'available' },
+        },
+        structure: null, knowledge: [], relatedSpecies: [], relatedReactions: [],
+      }}
+      EditorComponent={() => <div>编辑器不应显示</div>}
+      Viewer3DComponent={() => <div />}
+    />,
+  )
+
+  expect(screen.getByRole('heading', { name: '硝酸铝' })).toBeInTheDocument()
+  expect(screen.getByText('暂无可用的已确认结构')).toBeInTheDocument()
+  expect(screen.queryByText('编辑器不应显示')).not.toBeInTheDocument()
+  expect(onAnalyze).not.toHaveBeenCalled()
 })

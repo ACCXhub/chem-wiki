@@ -37,6 +37,7 @@ from .read_model import (
     CatalogSpeciesThermochemistry,
     CatalogSpeciesThermochemistryContext,
     CatalogStructureEntry,
+    CatalogStructureExploration,
 )
 
 EQUATION_MODES = {"molecular", "ionic", "net_ionic"}
@@ -640,6 +641,45 @@ class PostgresCatalogReader:
             isomeric_smiles=structure.isomeric_smiles,
             molecular_formula=structure.molecular_formula,
             formal_charge=structure.formal_charge,
+        )
+
+    def get_structure_exploration(
+        self, application_species_id: UUID
+    ) -> CatalogStructureExploration | None:
+        matches = self.search_species(application_ids=[application_species_id], limit=1)
+        if not matches:
+            return None
+        species = matches[0]
+        related_reactions = [
+            reaction
+            for reaction in self.find_reactions_by_application_ids([application_species_id])
+            if reaction.materialization_state == "materialized"
+        ][:4]
+        related_species_ids = list(
+            dict.fromkeys(
+                participant.species_id
+                for reaction in related_reactions
+                for participant in reaction.participants
+                if participant.species_id is not None
+                and participant.species_id != species.consolidated_id
+            )
+        )[:6]
+        related_species = [
+            CatalogRelatedSpeciesResult(
+                **item.model_dump(),
+                structure_available=self.get_structure_entry(item.application_id) is not None,
+            )
+            for item in self.get_species_by_consolidated_ids(related_species_ids)
+        ]
+        return CatalogStructureExploration(
+            species=species,
+            structure=self.get_structure_entry(application_species_id),
+            knowledge=self.search_knowledge(
+                linked_species_id=species.consolidated_id,
+                limit=4,
+            ),
+            related_species=related_species,
+            related_reactions=related_reactions,
         )
 
     def find_reactions_by_application_ids(

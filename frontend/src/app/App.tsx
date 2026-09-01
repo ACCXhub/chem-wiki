@@ -51,7 +51,7 @@ function App() {
       <>
         <div className="global-appearance"><AppearanceControl /></div>
         <Suspense fallback={<main className="app-route-loading">正在打开结构实验室…</main>}>
-          <StructureLab onBack={() => navigate('/')} speciesId={location.searchParams.get('species')} />
+          <StructureLab key={locationKey} onBack={() => navigate('/')} onNavigate={navigate} speciesId={location.searchParams.get('species')} />
         </Suspense>
       </>
     )

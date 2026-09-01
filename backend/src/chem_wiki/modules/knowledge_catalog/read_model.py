@@ -101,6 +101,16 @@ class CatalogStructureEntry(CatalogDto):
     formal_charge: int | None
 
 
+class CatalogStructureExploration(CatalogDto):
+    """Bounded learner context for one catalog species in Structure Lab."""
+
+    species: CatalogSpeciesResult
+    structure: CatalogStructureEntry | None
+    knowledge: list[CatalogKnowledgeResult]
+    related_species: list["CatalogRelatedSpeciesResult"]
+    related_reactions: list[CatalogReactionResult]
+
+
 class CatalogRelatedSpeciesResult(CatalogSpeciesResult):
     structure_available: bool
 

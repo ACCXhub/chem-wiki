@@ -21,6 +21,7 @@ from .read_model import (
     CatalogSpeciesResult,
     CatalogSpeciesThermochemistryContext,
     CatalogStructureEntry,
+    CatalogStructureExploration,
 )
 
 
@@ -56,6 +57,10 @@ class CatalogReader(Protocol):
     ) -> list[CatalogReactionResult]: ...
 
     def get_structure_entry(self, application_species_id: UUID) -> CatalogStructureEntry | None: ...
+
+    def get_structure_exploration(
+        self, application_species_id: UUID
+    ) -> CatalogStructureExploration | None: ...
 
     def search_knowledge(
         self,
@@ -219,6 +224,20 @@ def get_species_structure(
     if entry is None:
         raise HTTPException(status_code=404, detail="该物质没有可用结构")
     return entry
+
+
+@router.get(
+    "/species/{application_species_id}/structure-exploration",
+    response_model=CatalogStructureExploration,
+)
+def get_structure_exploration(
+    application_species_id: UUID,
+    reader: Annotated[CatalogReader, Depends(get_catalog_reader)],
+) -> CatalogStructureExploration:
+    exploration = reader.get_structure_exploration(application_species_id)
+    if exploration is None:
+        raise HTTPException(status_code=404, detail="未找到 catalog 物质")
+    return exploration
 
 
 @router.get(

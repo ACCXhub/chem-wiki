@@ -1,17 +1,12 @@
-import type { AnalyzeStructureResponse, StructureInputFormat } from './types'
+import type {
+  AnalyzeStructureResponse,
+  CatalogStructureExploration,
+  StructureInputFormat,
+} from './types'
 
 
 interface ErrorPayload {
   detail?: { message?: string } | string
-}
-export interface CatalogStructureEntry {
-  applicationSpeciesId: string
-  publishedStructureId: string
-  structureScope: string
-  canonicalSmiles: string | null
-  isomericSmiles: string | null
-  molecularFormula: string | null
-  formalCharge: number | null
 }
 export async function analyzeStructure(
   format: StructureInputFormat,
@@ -33,13 +28,13 @@ export async function analyzeStructure(
   return (await response.json()) as AnalyzeStructureResponse
 }
 
-export async function loadCatalogStructure(
+export async function loadStructureExploration(
   applicationSpeciesId: string,
-): Promise<CatalogStructureEntry> {
+): Promise<CatalogStructureExploration> {
   const response = await fetch(
-    `/v1/catalog/species/${encodeURIComponent(applicationSpeciesId)}/structure`,
+    `/v1/catalog/species/${encodeURIComponent(applicationSpeciesId)}/structure-exploration`,
     { headers: { Accept: 'application/json' } },
   )
-  if (!response.ok) throw new Error(`已知结构加载失败（HTTP ${response.status}）`)
-  return (await response.json()) as CatalogStructureEntry
+  if (!response.ok) throw new Error(`目录物质加载失败（HTTP ${response.status}）`)
+  return (await response.json()) as CatalogStructureExploration
 }

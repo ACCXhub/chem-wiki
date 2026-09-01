@@ -36,6 +36,7 @@ from .read_model import (
     CatalogSpeciesThermochemistry,
     CatalogSpeciesThermochemistryContext,
     CatalogStructureEntry,
+    CatalogStructureExploration,
 )
 from .release import (
     PINNED_RELEASE,
@@ -77,6 +78,7 @@ __all__ = [
     "CatalogSpeciesThermochemistryContext",
     "CatalogSpeciesThermochemistryRow",
     "CatalogStructureEntry",
+    "CatalogStructureExploration",
     "CatalogStructureLinkRow",
     "CatalogStructureRecordRow",
     "CatalogTeachingProjectionRow",

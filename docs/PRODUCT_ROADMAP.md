@@ -189,7 +189,7 @@ phase records。Windows launcher 只在新 pinned release 缺失时执行一次 
 
 本阶段没有新增 learner-facing Structure UI，也没有 reaction enthalpy 或 bond-change calculation。
 
-## Phase 3B — Structure experience
+## Phase 3B — Structure experience（已实现）
 
 **Goal:** make catalog-backed structure exploration part of normal chemistry navigation.
 
@@ -200,6 +200,14 @@ Use accepted Structure links and the existing Ketcher/RDKit/3Dmol/FunctionalGrou
 - related species and transformations;
 - related known reactions;
 - transitions into Equation Lab.
+
+`knowledge_catalog` 的 bounded `structure-exploration` read projection 将一个 application Species、
+accepted Structure（可为空）、最多四条已 materialized Reaction、由这些 Reaction 投影的相关物质，
+以及最多四条既有结构知识交给 Structure Lab。Structure Lab 继续独占 RDKit 分析、2D/3D 与
+FunctionalGroup 检测；React 仅将现有知识 payload 中的已发布结构字段转成学习者文案。
+
+无 accepted Structure 的目录物质显示明确的不可用状态，并可进入原有自由 SMILES/molblock 分析；
+不会从名称、分子式或相似物质推断结构。反应入口继续进入既有 M07 Reaction detail / Equation Lab。
 
 If structure-data normalisation becomes a demonstrated ingestion problem, evaluate ChEMBL Structure Pipeline before writing another standardiser. If systematic-name parsing becomes a demonstrated user need, evaluate OPSIN before custom parsing.
 
