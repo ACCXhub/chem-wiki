@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest'
 
-import { analyzeStructure } from './api'
+import { analyzeStructure, loadSpeciesThermochemistry } from './api'
 
 
 afterEach(() => vi.unstubAllGlobals())
@@ -28,4 +28,14 @@ test('surfaces an HTTP boundary error without fabricating chemistry results', as
   })))
 
   await expect(analyzeStructure('smiles', 'CCO')).rejects.toThrow('化学引擎暂不可用')
+})
+
+test('uses the existing phase read seam and keeps a missing context neutral', async () => {
+  const fetchMock = vi.fn(() => Promise.resolve({ ok: false, status: 404 }))
+  vi.stubGlobal('fetch', fetchMock)
+
+  await expect(loadSpeciesThermochemistry('water')).resolves.toBeNull()
+  expect(fetchMock).toHaveBeenCalledWith('/v1/catalog/species/water/thermochemistry', {
+    headers: { Accept: 'application/json' },
+  })
 })

@@ -129,3 +129,46 @@ export interface CatalogStructureExploration {
   relatedSpecies: Array<CatalogExplorationSpecies & { structureAvailable: boolean }>
   relatedReactions: CatalogStructureReaction[]
 }
+
+export type ChemicalPhase = 's' | 'l' | 'g' | 'aq'
+export type CatalogDecimal = number | string
+
+export interface CatalogSpeciesPhaseCondition {
+  phase: ChemicalPhase
+  thermochemistry_available_at_reference?: boolean
+}
+
+export interface CatalogSpeciesPhaseFact {
+  standardPhase: ChemicalPhase
+  allowedTeachingPhases: ChemicalPhase[]
+  thermochemistryAvailablePhases: ChemicalPhase[]
+  phaseConditions: CatalogSpeciesPhaseCondition[]
+  referenceTemperatureK: CatalogDecimal
+  standardPressureBar: CatalogDecimal
+}
+
+export interface CatalogSpeciesThermochemistry {
+  phase: ChemicalPhase
+  temperatureK: CatalogDecimal
+  standardPressureBar: CatalogDecimal
+  deltaFHKjMol?: CatalogDecimal | null
+  deltaFGKjMol?: CatalogDecimal | null
+  sJMolK?: CatalogDecimal | null
+  cpJMolK?: CatalogDecimal | null
+}
+
+export interface CatalogPhaseTransition {
+  transition: string
+  fromPhase: ChemicalPhase
+  toPhase: ChemicalPhase
+  enthalpyKjMol: CatalogDecimal
+  transitionTemperatureK: CatalogDecimal
+}
+
+export interface CatalogSpeciesThermochemistryContext {
+  consolidatedSpeciesId: string
+  applicationSpeciesId: string
+  phaseFact: CatalogSpeciesPhaseFact
+  thermochemistry: CatalogSpeciesThermochemistry[]
+  phaseTransitions: CatalogPhaseTransition[]
+}

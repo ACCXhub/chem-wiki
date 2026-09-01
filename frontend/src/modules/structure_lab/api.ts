@@ -1,6 +1,7 @@
 import type {
   AnalyzeStructureResponse,
   CatalogStructureExploration,
+  CatalogSpeciesThermochemistryContext,
   StructureInputFormat,
 } from './types'
 
@@ -37,4 +38,16 @@ export async function loadStructureExploration(
   )
   if (!response.ok) throw new Error(`目录物质加载失败（HTTP ${response.status}）`)
   return (await response.json()) as CatalogStructureExploration
+}
+
+export async function loadSpeciesThermochemistry(
+  applicationSpeciesId: string,
+): Promise<CatalogSpeciesThermochemistryContext | null> {
+  const response = await fetch(
+    `/v1/catalog/species/${encodeURIComponent(applicationSpeciesId)}/thermochemistry`,
+    { headers: { Accept: 'application/json' } },
+  )
+  if (response.status === 404) return null
+  if (!response.ok) throw new Error(`物态信息加载失败（HTTP ${response.status}）`)
+  return (await response.json()) as CatalogSpeciesThermochemistryContext
 }

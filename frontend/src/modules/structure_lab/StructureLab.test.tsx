@@ -48,6 +48,57 @@ const validResult: AnalyzeStructureResponse = {
   message: null,
 }
 
+test('presents H2O as one species with switchable phase-specific learning context', async () => {
+  render(
+    <StructureLabView
+      onBack={() => undefined}
+      onAnalyze={() => Promise.resolve(validResult)}
+      catalogExploration={{
+        species: {
+          consolidatedId: 'species:water', applicationId: 'water', entityKind: 'substance',
+          nameZh: '水', nameEn: 'water', formula: 'H2O', charge: 0, composition: { H: 2, O: 1 },
+          aliases: [], chemicalClassifications: [], primaryCategory: 'inorganic', tags: [],
+          defaultPriority: 'core', defaultPaletteRank: 1, equationModes: {},
+        },
+        structure: null, knowledge: [], relatedSpecies: [], relatedReactions: [],
+      }}
+      phaseContext={{
+        consolidatedSpeciesId: 'species:water', applicationSpeciesId: 'water',
+        phaseFact: {
+          standardPhase: 'l', allowedTeachingPhases: ['s', 'l', 'g'],
+          thermochemistryAvailablePhases: ['l', 'g'], phaseConditions: [
+            { phase: 's', thermochemistry_available_at_reference: false },
+            { phase: 'l', thermochemistry_available_at_reference: true },
+            { phase: 'g', thermochemistry_available_at_reference: true },
+          ], referenceTemperatureK: 298.15, standardPressureBar: 1,
+        },
+        thermochemistry: [
+          { phase: 'l', temperatureK: 298.15, standardPressureBar: 1, deltaFHKjMol: -285.828371 },
+          { phase: 'g', temperatureK: 298.15, standardPressureBar: 1, deltaFHKjMol: -241.824622 },
+        ],
+        phaseTransitions: [
+          { transition: 'fusion', fromPhase: 's', toPhase: 'l', enthalpyKjMol: 5.9954, transitionTemperatureK: 273.15 },
+          { transition: 'vaporization', fromPhase: 'l', toPhase: 'g', enthalpyKjMol: 40.8779, transitionTemperatureK: 373.15 },
+        ],
+      }}
+      EditorComponent={() => <div />}
+      Viewer3DComponent={() => <div />}
+    />,
+  )
+
+  expect(screen.getByText('物态')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '液态 (l)' })).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByText('ΔfH° −285.828 kJ/mol')).toBeInTheDocument()
+  expect(screen.getByText('汽化')).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: '固态 (s)' }))
+  expect(screen.getByText('该物态暂无参考条件下的热化学数据。')).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: '气态 (g)' }))
+  expect(screen.getByText('ΔfH° −241.825 kJ/mol')).toBeInTheDocument()
+  expect(screen.getByText('汽化')).toBeInTheDocument()
+})
+
 test('analyzes an edited structure and links functional groups to 2D and 3D views', async () => {
   const onAnalyze = vi.fn(() => Promise.resolve(validResult))
   render(
@@ -216,6 +267,16 @@ test('presents catalog-linked ethene as a structure learning loop with its real 
       onAnalyze={() => Promise.resolve(etheneResult)}
       initialSmiles="C=C"
       catalogExploration={catalogExploration}
+      phaseContext={{
+        consolidatedSpeciesId: 'species:ethene', applicationSpeciesId: 'ethene',
+        phaseFact: {
+          standardPhase: 'g', allowedTeachingPhases: ['g'], thermochemistryAvailablePhases: ['g'],
+          phaseConditions: [{ phase: 'g', thermochemistry_available_at_reference: true }],
+          referenceTemperatureK: 298.15, standardPressureBar: 1,
+        },
+        thermochemistry: [{ phase: 'g', temperatureK: 298.15, standardPressureBar: 1, deltaFHKjMol: 52.499701 }],
+        phaseTransitions: [],
+      }}
       EditorComponent={({ value, onChange }) => <textarea aria-label="结构编辑器" value={value} onChange={(event) => onChange(event.target.value)} />}
       Viewer3DComponent={() => <div>3D model</div>}
     />,
@@ -226,6 +287,8 @@ test('presents catalog-linked ethene as a structure learning loop with its real 
   expect(screen.getByText('碳碳双键是烯烃的特征结构。')).toBeInTheDocument()
   expect(screen.getByText('sp² 杂化')).toBeInTheDocument()
   expect(screen.getByText('分子骨架近似平面')).toBeInTheDocument()
+  expect(screen.getByText('气态 (g)')).toBeInTheDocument()
+  expect(screen.queryByRole('group', { name: '可用物态' })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '在方程实验室中查看乙烯催化加氢' }))
   expect(onNavigate).toHaveBeenCalledWith('/equation-lab?reaction=reaction%3Aethene-hydrogenation')
 })
@@ -252,6 +315,7 @@ test('keeps a catalog species without an accepted structure out of the free-form
 
   expect(screen.getByRole('heading', { name: '硝酸铝' })).toBeInTheDocument()
   expect(screen.getByText('暂无可用的已确认结构')).toBeInTheDocument()
+  expect(screen.getByText('暂无可用的物态信息')).toBeInTheDocument()
   expect(screen.queryByText('编辑器不应显示')).not.toBeInTheDocument()
   expect(onAnalyze).not.toHaveBeenCalled()
 })

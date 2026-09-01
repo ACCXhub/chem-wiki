@@ -214,6 +214,16 @@ PhET Molecule Shapes、PhET Build a Molecule 与 MolView 仅保留为交互参�
 
 If structure-data normalisation becomes a demonstrated ingestion problem, evaluate ChEMBL Structure Pipeline before writing another standardiser. If systematic-name parsing becomes a demonstrated user need, evaluate OPSIN before custom parsing.
 
+## Phase 3C.1 — Species phase experience（已实现）
+
+Structure Lab 直接消费既有 `GET /v1/catalog/species/{application_species_id}/thermochemistry`
+read seam；不新增 release、迁移或平行 Species identity。目录物质以 catalog 的 `standard_phase`
+作为默认教学物态，只允许切换 `allowed_teaching_phases` 中已发布状态；单一状态保持自然展示。
+
+H2O 的液态/气态热化学与真实熔化、汽化记录随所选物态更新，固态明确保留为“暂无参考条件下的热化学数据”。
+无 phase fact 的物质显示中性不可用状态；无 accepted Structure 时仍可学习物态并进入既有自由结构分析。Equation Lab
+继续由 EquationDraft 拥有物态编辑与历史，不由 catalog 默认值静默覆盖。reaction ΔH 与 bond enthalpy UI 留待 Phase 3C.2。
+
 ## Phase 4 — Reaction process / mechanism
 
 Mechanism work begins after the product can already navigate Reaction ↔ Species ↔ Structure.

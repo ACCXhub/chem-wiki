@@ -10,9 +10,12 @@ import {
   type ReactNode,
 } from 'react'
 
-import { analyzeStructure, loadStructureExploration } from './api'
+import { analyzeStructure, loadSpeciesThermochemistry, loadStructureExploration } from './api'
 import type {
   AnalyzeStructureResponse,
+  CatalogDecimal,
+  CatalogSpeciesThermochemistryContext,
+  ChemicalPhase,
   CatalogStructureExploration,
   MoleculeViewer3DProps,
   StructuralTeachingFact,
@@ -40,6 +43,7 @@ interface StructureLabViewProps extends StructureLabProps {
   Viewer3DComponent?: ComponentType<MoleculeViewer3DProps>
   initialSmiles?: string | null
   catalogExploration?: CatalogStructureExploration | null
+  phaseContext?: CatalogSpeciesThermochemistryContext | null
 }
 
 interface AdapterErrorBoundaryProps {
@@ -99,6 +103,110 @@ const STRUCTURAL_TEACHING_COPY: Record<string, { heading: string; description: s
   },
 }
 
+const PHASE_LABELS: Record<ChemicalPhase, string> = {
+  s: '固态',
+  l: '液态',
+  g: '气态',
+  aq: '水溶液',
+}
+
+const TRANSITION_LABELS: Record<string, string> = {
+  fusion: '熔化',
+  vaporization: '汽化',
+}
+
+function formatValue(value: CatalogDecimal): string {
+  const numericValue = Number(value)
+  return Number.isFinite(numericValue)
+    ? numericValue.toLocaleString('zh-CN', { maximumFractionDigits: 3 })
+    : String(value)
+}
+
+function formatSignedValue(value: CatalogDecimal): string {
+  const numericValue = Number(value)
+  return numericValue < 0 ? `−${formatValue(Math.abs(numericValue))}` : formatValue(value)
+}
+
+function phaseLabel(phase: ChemicalPhase): string {
+  return `${PHASE_LABELS[phase]} (${phase})`
+}
+
+export function SpeciesPhaseExperience({
+  context,
+}: {
+  context: CatalogSpeciesThermochemistryContext | null
+}) {
+  const [selectedPhase, setSelectedPhase] = useState<ChemicalPhase | null>(
+    context?.phaseFact.standardPhase ?? null,
+  )
+
+  if (!context || !selectedPhase) {
+    return (
+      <section className="species-phase-context is-unavailable" aria-label="物态信息">
+        <span>物态</span>
+        <p>暂无可用的物态信息</p>
+      </section>
+    )
+  }
+
+  const phases = context.phaseFact.allowedTeachingPhases
+  const records = context.thermochemistry.filter((item) => item.phase === selectedPhase)
+  const condition = context.phaseFact.phaseConditions.find((item) => item.phase === selectedPhase)
+  const transitions = context.phaseTransitions.filter((item) => (
+    item.fromPhase === selectedPhase || item.toPhase === selectedPhase
+  ))
+
+  return (
+    <section className="species-phase-context" aria-labelledby="species-phase-heading">
+      <div className="species-phase-heading">
+        <span id="species-phase-heading">物态</span>
+        {phases.length === 1 ? (
+          <strong>{phaseLabel(selectedPhase)}</strong>
+        ) : (
+          <div role="group" aria-label="可用物态">
+            {phases.map((phase) => (
+              <button
+                key={phase}
+                type="button"
+                aria-label={phaseLabel(phase)}
+                aria-pressed={selectedPhase === phase}
+                onClick={() => setSelectedPhase(phase)}
+              >
+                {phaseLabel(phase)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="species-phase-details" aria-live="polite">
+        <p>参考条件：{formatValue(context.phaseFact.referenceTemperatureK)} K，{formatValue(context.phaseFact.standardPressureBar)} bar</p>
+        {records.flatMap((record) => ([
+          record.deltaFHKjMol === null || record.deltaFHKjMol === undefined ? null : `ΔfH° ${formatSignedValue(record.deltaFHKjMol)} kJ/mol`,
+          record.deltaFGKjMol === null || record.deltaFGKjMol === undefined ? null : `ΔfG° ${formatSignedValue(record.deltaFGKjMol)} kJ/mol`,
+          record.sJMolK === null || record.sJMolK === undefined ? null : `S° ${formatValue(record.sJMolK)} J/(mol·K)`,
+          record.cpJMolK === null || record.cpJMolK === undefined ? null : `Cp ${formatValue(record.cpJMolK)} J/(mol·K)`,
+        ])).filter((item): item is string => item !== null).map((item) => <span key={item}>{item}</span>)}
+        {!records.length || !records.some((record) => (
+          record.deltaFHKjMol != null || record.deltaFGKjMol != null || record.sJMolK != null || record.cpJMolK != null
+        )) ? (
+          <small>{condition?.thermochemistry_available_at_reference === false ? '该物态暂无参考条件下的热化学数据。' : '该物态暂无可显示的热化学数据。'}</small>
+        ) : null}
+      </div>
+      {transitions.length ? (
+        <div className="species-phase-transitions">
+          <span>相关相变</span>
+          {transitions.map((item) => (
+            <p key={`${item.transition}-${item.fromPhase}-${item.toPhase}`}>
+              <strong>{TRANSITION_LABELS[item.transition] ?? item.transition}</strong>
+              {phaseLabel(item.fromPhase)} → {phaseLabel(item.toPhase)}；{formatValue(item.transitionTemperatureK)} K，ΔH {formatValue(item.enthalpyKjMol)} kJ/mol
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
 function structuralTeachingLabel(fact: StructuralTeachingFact): string | null {
   const labels: Record<string, string> = {
     sp3_hybridization: 'sp³ 杂化',
@@ -122,6 +230,7 @@ export function StructureLabView({
   Viewer3DComponent = LazyMoleculeViewer3D,
   initialSmiles = null,
   catalogExploration = null,
+  phaseContext = null,
 }: StructureLabViewProps) {
   const [text, setText] = useState(initialSmiles ?? EXAMPLES[0].text)
   const [label, setLabel] = useState(catalogExploration?.species.nameZh ?? (initialSmiles ? '目录物质' : EXAMPLES[0].label))
@@ -154,6 +263,7 @@ export function StructureLabView({
           <span>目录物质</span>
           <h1 id="unavailable-title">{catalogExploration.species.nameZh}</h1>
           <p>{formulaWithSubscripts(catalogExploration.species.formula)}</p>
+          <SpeciesPhaseExperience context={phaseContext} />
           <strong>暂无可用的已确认结构</strong>
           <small>可在结构实验室中继续分析你自己的 SMILES 或 molblock。</small>
           {onNavigate ? <button type="button" onClick={() => onNavigate('/structure-lab')}>打开自由结构分析</button> : null}
@@ -234,6 +344,7 @@ export function StructureLabView({
               <p>{result?.state === 'valid' ? '可从下方二维与三维视图继续观察此结构。' : '正在从已确认结构整理要点…'}</p>
             )}
           </div>
+          <SpeciesPhaseExperience context={phaseContext} />
         </section>
       ) : null}
 
@@ -407,6 +518,7 @@ export function StructureLabView({
 
 export default function StructureLab({ onBack, onNavigate, speciesId }: StructureLabProps) {
   const [catalogExploration, setCatalogExploration] = useState<CatalogStructureExploration | null | undefined>(speciesId ? undefined : null)
+  const [phaseContext, setPhaseContext] = useState<CatalogSpeciesThermochemistryContext | null | undefined>(speciesId ? undefined : null)
   const [entryError, setEntryError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -417,11 +529,16 @@ export default function StructureLab({ onBack, onNavigate, speciesId }: Structur
     }).catch((reason: unknown) => {
       if (active) setEntryError(reason instanceof Error ? reason.message : '已知结构加载失败')
     })
+    void loadSpeciesThermochemistry(speciesId).then((context) => {
+      if (active) setPhaseContext(context)
+    }).catch(() => {
+      if (active) setPhaseContext(null)
+    })
     return () => { active = false }
   }, [speciesId])
 
-  if (speciesId && catalogExploration === undefined && !entryError) return <main className="structure-lab-page structure-entry-state" role="status">正在载入目录物质…</main>
+  if (speciesId && (catalogExploration === undefined || phaseContext === undefined) && !entryError) return <main className="structure-lab-page structure-entry-state" role="status">正在载入目录物质…</main>
   if (speciesId && entryError) return <main className="structure-lab-page structure-entry-state" role="alert">{entryError}</main>
   const knownSmiles = catalogExploration?.structure?.isomericSmiles ?? catalogExploration?.structure?.canonicalSmiles ?? null
-  return <StructureLabView key={speciesId ?? 'manual'} onBack={onBack} onNavigate={onNavigate} onAnalyze={analyzeStructure} initialSmiles={knownSmiles} catalogExploration={catalogExploration} />
+  return <StructureLabView key={speciesId ?? 'manual'} onBack={onBack} onNavigate={onNavigate} onAnalyze={analyzeStructure} initialSmiles={knownSmiles} catalogExploration={catalogExploration} phaseContext={phaseContext ?? null} />
 }
