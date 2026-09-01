@@ -15,6 +15,7 @@ import type {
   AnalyzeStructureResponse,
   CatalogStructureExploration,
   MoleculeViewer3DProps,
+  StructuralTeachingFact,
   StructureEditorProps,
   StructureInputFormat,
 } from './types'
@@ -83,25 +84,34 @@ const GROUP_LEARNING_MEANING: Record<string, string> = {
   alkyne: '碳碳三键是炔烃的特征结构。',
 }
 
-function structuralKnowledgeFacts(payload: Record<string, unknown>): string[] {
-  const geometry: Record<string, string> = {
-    tetrahedral: '正四面体',
-    planar_molecule: '平面分子',
-    linear: '直线形',
+const STRUCTURAL_TEACHING_COPY: Record<string, { heading: string; description: string }> = {
+  carbon_carbon_double_bond: {
+    heading: 'C=C',
+    description: '碳碳双键是烯烃的特征结构。',
+  },
+  carbon_carbon_triple_bond: {
+    heading: 'C≡C',
+    description: '碳碳三键是炔烃的特征结构。',
+  },
+  tetrahedral_carbon: {
+    heading: '四面体结构',
+    description: '中心碳原子周围的四个成键方向构成四面体。',
+  },
+}
+
+function structuralTeachingLabel(fact: StructuralTeachingFact): string | null {
+  const labels: Record<string, string> = {
+    sp3_hybridization: 'sp³ 杂化',
+    sp2_hybridization: 'sp² 杂化',
+    sp_hybridization: 'sp 杂化',
+    trigonal_planar_geometry: '局部为平面三角形',
+    linear_geometry: '局部为直线形',
+    approximately_planar_skeleton: '分子骨架近似平面',
   }
-  const facts: string[] = []
-  if (typeof payload.molecular_geometry === 'string' && geometry[payload.molecular_geometry]) {
-    facts.push(geometry[payload.molecular_geometry])
+  if (fact.key === 'ideal_bond_angle' && fact.value !== null) {
+    return `理想键角约 ${fact.value}°`
   }
-  if (typeof payload.central_hybridization_model === 'string') {
-    facts.push(`${payload.central_hybridization_model.replace('sp2', 'sp²').replace('sp3', 'sp³')} 杂化`)
-  }
-  if (typeof payload.representative_bond_angle_deg === 'number') {
-    facts.push(`键角约 ${payload.representative_bond_angle_deg}°`)
-  }
-  if (typeof payload.sigma_bond_count === 'number') facts.push(`${payload.sigma_bond_count} 个 σ 键`)
-  if (typeof payload.pi_bond_count === 'number') facts.push(`${payload.pi_bond_count} 个 π 键`)
-  return facts
+  return labels[fact.key] ?? null
 }
 
 export function StructureLabView({
@@ -203,19 +213,26 @@ export function StructureLabView({
             <strong>{formulaWithSubscripts(catalogExploration.species.formula)}</strong>
           </div>
           <div className="structure-catalog-learning">
-            {catalogExploration.knowledge.flatMap((item) => {
-              const facts = structuralKnowledgeFacts(item.payload)
-              return facts.length ? [<p key={item.consolidatedId}><span>结构要点</span>{facts.join(' · ')}</p>] : []
-            })}
-          </div>
-          <div className="structure-catalog-links">
-            {catalogExploration.relatedSpecies.length ? (
-              <div><span>相关物质</span>{catalogExploration.relatedSpecies.map((species) => <button key={species.applicationId} type="button" onClick={() => onNavigate?.(`/structure-lab?species=${encodeURIComponent(species.applicationId)}`)} disabled={!species.structureAvailable}>{species.nameZh}</button>)}</div>
-            ) : null}
-            <div>
-              <span>相关反应</span>
-              {catalogExploration.relatedReactions.length ? catalogExploration.relatedReactions.map((reaction) => <button key={reaction.consolidatedId} type="button" aria-label={`在方程实验室中查看${reaction.nameZh}`} onClick={() => onNavigate?.(`/equation-lab?reaction=${encodeURIComponent(reaction.consolidatedId)}`)}>{reaction.nameZh}</button>) : <small>当前目录中暂无可继续查看的真实反应。</small>}
-            </div>
+            <span>结构要点</span>
+            {result?.structuralTeaching?.primary ? (() => {
+              const copy = STRUCTURAL_TEACHING_COPY[result.structuralTeaching.primary.key]
+              if (!copy) return <p>可从下方二维与三维视图继续观察此结构。</p>
+              const observations = result.structuralTeaching.observations
+                .map(structuralTeachingLabel)
+                .filter((item): item is string => item !== null)
+              return <>
+                <h3>{copy.heading}</h3>
+                <p>{copy.description}</p>
+                {observations.length ? (
+                  <details>
+                    <summary>查看结构观察</summary>
+                    <ul>{observations.map((observation) => <li key={observation}>{observation}</li>)}</ul>
+                  </details>
+                ) : null}
+              </>
+            })() : (
+              <p>{result?.state === 'valid' ? '可从下方二维与三维视图继续观察此结构。' : '正在从已确认结构整理要点…'}</p>
+            )}
           </div>
         </section>
       ) : null}
@@ -340,10 +357,10 @@ export function StructureLabView({
                     >
                   <span><strong>{group.nameZh}</strong><small>{group.nameEn}</small></span>
                   <em>{group.occurrences.length} 处</em>
-                  {GROUP_LEARNING_MEANING[group.key] ? <p>{GROUP_LEARNING_MEANING[group.key]}</p> : null}
+                  {!catalogExploration && GROUP_LEARNING_MEANING[group.key] ? <p>{GROUP_LEARNING_MEANING[group.key]}</p> : null}
                 </button>
                   )
-                }) : <p className="structure-no-groups">当前课程目录未匹配到官能团。</p>}
+                }) : <p className="structure-no-groups">当前结构未检测到典型有机官能团。</p>}
               </div>
               <aside className="structure-boundary">
                 <strong>结构分析范围</strong>
@@ -355,6 +372,35 @@ export function StructureLabView({
           )}
         </section>
       </div>
+
+      {catalogExploration ? (
+        <section className="structure-catalog-exploration" aria-labelledby="catalog-exploration-heading">
+          <div className="structure-catalog-exploration-heading">
+            <span>延伸探索</span>
+            <h2 id="catalog-exploration-heading">从结构继续学习</h2>
+          </div>
+          {catalogExploration.knowledge.length ? (
+            <details className="structure-catalog-knowledge">
+              <summary>相关知识（{catalogExploration.knowledge.length}）</summary>
+              <ul>{catalogExploration.knowledge.map((item) => (
+                <li key={item.consolidatedId}>
+                  <strong>{item.displayNameZh}</strong>
+                  {item.contentZh ? <span>{item.contentZh}</span> : null}
+                </li>
+              ))}</ul>
+            </details>
+          ) : null}
+          <div className="structure-catalog-links">
+            {catalogExploration.relatedSpecies.length ? (
+              <div><span>相关物质</span>{catalogExploration.relatedSpecies.map((species) => <button key={species.applicationId} type="button" onClick={() => onNavigate?.(`/structure-lab?species=${encodeURIComponent(species.applicationId)}`)} disabled={!species.structureAvailable}>{species.nameZh}</button>)}</div>
+            ) : null}
+            <div>
+              <span>相关反应</span>
+              {catalogExploration.relatedReactions.length ? catalogExploration.relatedReactions.map((reaction) => <button key={reaction.consolidatedId} type="button" aria-label={`在方程实验室中查看${reaction.nameZh}`} onClick={() => onNavigate?.(`/equation-lab?reaction=${encodeURIComponent(reaction.consolidatedId)}`)}>{reaction.nameZh}</button>) : <small>当前目录中暂无可继续查看的真实反应。</small>}
+            </div>
+          </div>
+        </section>
+      ) : null}
     </main>
   )
 }

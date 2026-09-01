@@ -72,6 +72,21 @@ class FunctionalGroupDto(BaseModel):
     occurrences: list[FunctionalGroupOccurrenceDto]
 
 
+class StructuralTeachingFactDto(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    key: str
+    atom_indices: list[int] = Field(alias="atomIndices")
+    value: float | None = None
+
+
+class StructuralTeachingProjectionDto(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    primary: StructuralTeachingFactDto | None = None
+    observations: list[StructuralTeachingFactDto]
+
+
 class AnalyzeStructureResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -86,6 +101,10 @@ class AnalyzeStructureResponse(BaseModel):
     functional_groups: list[FunctionalGroupDto] = Field(
         default_factory=list,
         alias="functionalGroups",
+    )
+    structural_teaching: StructuralTeachingProjectionDto | None = Field(
+        default=None,
+        alias="structuralTeaching",
     )
     code: str | None = None
     message: str | None = None
@@ -114,6 +133,7 @@ def _to_response(result: StructureAnalysis) -> AnalyzeStructureResponse:
                 }
                 for item in result.functional_groups
             ],
+            "structural_teaching": result.structural_teaching,
             "code": result.code,
             "message": result.message,
         },

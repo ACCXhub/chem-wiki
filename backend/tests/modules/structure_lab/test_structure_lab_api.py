@@ -43,6 +43,53 @@ def test_analyze_smiles_returns_normalized_structure_and_viewer_data() -> None:
     assert payload["message"] is None
 
 
+def test_analyze_derives_ethene_teaching_evidence_from_its_bond_and_hybridization() -> None:
+    response = TestClient(create_app()).post(
+        "/v1/structures/analyze",
+        json={"format": "smiles", "text": "C=C"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["structuralTeaching"] == {
+        "primary": {"key": "carbon_carbon_double_bond", "atomIndices": [0, 1], "value": None},
+        "observations": [
+            {"key": "sp2_hybridization", "atomIndices": [0, 1], "value": None},
+            {"key": "trigonal_planar_geometry", "atomIndices": [0, 1], "value": None},
+            {"key": "ideal_bond_angle", "atomIndices": [0, 1], "value": 120.0},
+            {"key": "approximately_planar_skeleton", "atomIndices": [0, 1], "value": None},
+        ],
+    }
+
+
+def test_analyze_derives_methane_and_ethyne_teaching_evidence_without_species_identity() -> None:
+    client = TestClient(create_app())
+
+    methane = client.post(
+        "/v1/structures/analyze",
+        json={"format": "smiles", "text": "C"},
+    ).json()["structuralTeaching"]
+    ethyne = client.post(
+        "/v1/structures/analyze",
+        json={"format": "smiles", "text": "C#C"},
+    ).json()["structuralTeaching"]
+
+    assert methane == {
+        "primary": {"key": "tetrahedral_carbon", "atomIndices": [0], "value": None},
+        "observations": [
+            {"key": "sp3_hybridization", "atomIndices": [0], "value": None},
+            {"key": "ideal_bond_angle", "atomIndices": [0], "value": 109.5},
+        ],
+    }
+    assert ethyne == {
+        "primary": {"key": "carbon_carbon_triple_bond", "atomIndices": [0, 1], "value": None},
+        "observations": [
+            {"key": "sp_hybridization", "atomIndices": [0, 1], "value": None},
+            {"key": "linear_geometry", "atomIndices": [0, 1], "value": None},
+            {"key": "ideal_bond_angle", "atomIndices": [0, 1], "value": 180.0},
+        ],
+    }
+
+
 def test_invalid_valence_returns_an_explicit_non_publishable_state() -> None:
     response = TestClient(create_app()).post(
         "/v1/structures/analyze",
@@ -60,6 +107,7 @@ def test_invalid_valence_returns_an_explicit_non_publishable_state() -> None:
         "depiction": None,
         "conformer": None,
         "functionalGroups": [],
+        "structuralTeaching": None,
         "code": "invalid_structure",
         "message": "无法解析该结构，或原子价态不合法",
     }

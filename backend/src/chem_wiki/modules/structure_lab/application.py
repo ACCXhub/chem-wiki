@@ -67,6 +67,23 @@ class DetectedFunctionalGroup:
 
 
 @dataclass(frozen=True, slots=True)
+class StructuralTeachingFact:
+    """One structure-derived fact for learner-facing presentation."""
+
+    key: str
+    atom_indices: tuple[int, ...]
+    value: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StructuralTeachingProjection:
+    """A bounded hierarchy of structural evidence, independent of catalog identity."""
+
+    primary: StructuralTeachingFact | None
+    observations: tuple[StructuralTeachingFact, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class StructureAnalysis:
     state: AnalysisState
     input_format: str
@@ -77,6 +94,7 @@ class StructureAnalysis:
     depiction: StructureDepiction | None = None
     conformer: StructureConformer | None = None
     functional_groups: tuple[DetectedFunctionalGroup, ...] = ()
+    structural_teaching: StructuralTeachingProjection | None = None
     code: str | None = None
     message: str | None = None
 

@@ -209,6 +209,9 @@ FunctionalGroup 检测；React 仅将现有知识 payload 中的已发布结构�
 无 accepted Structure 的目录物质显示明确的不可用状态，并可进入原有自由 SMILES/molblock 分析；
 不会从名称、分子式或相似物质推断结构。反应入口继续进入既有 M07 Reaction detail / Equation Lab。
 
+Phase 3B.1 的教学层以一个结构要点优先、二维/三维同一已确认结构、次级观察渐进展开为准；
+PhET Molecule Shapes、PhET Build a Molecule 与 MolView 仅保留为交互参考，不复制代码或新增依赖。
+
 If structure-data normalisation becomes a demonstrated ingestion problem, evaluate ChEMBL Structure Pipeline before writing another standardiser. If systematic-name parsing becomes a demonstrated user need, evaluate OPSIN before custom parsing.
 
 ## Phase 4 — Reaction process / mechanism

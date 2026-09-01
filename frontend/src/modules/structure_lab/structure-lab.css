@@ -118,16 +118,26 @@
 .structure-error, .structure-viewer-error { border-color: var(--danger); color: var(--danger); background: var(--danger-bg); }
 
 .structure-entry-state { display: grid; min-height: 18rem; place-items: center; color: var(--text-muted); }
-.structure-catalog-context, .structure-unavailable { margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: 1.1rem; background: var(--surface-raised); box-shadow: var(--shadow); }
-.structure-catalog-context { display: grid; grid-template-columns: minmax(11rem, .55fr) minmax(16rem, 1fr) minmax(15rem, 1fr); gap: 1rem; align-items: start; }
+.structure-catalog-context, .structure-catalog-exploration, .structure-unavailable { margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: 1.1rem; background: var(--surface-raised); box-shadow: var(--shadow); }
+.structure-catalog-context { display: grid; grid-template-columns: minmax(11rem, .55fr) minmax(18rem, 1fr); gap: 1.25rem; align-items: start; }
 .structure-catalog-title { display: grid; gap: .15rem; }
-.structure-catalog-title > span, .structure-catalog-learning span, .structure-catalog-links > div > span { color: var(--text-muted); font-size: .64rem; font-weight: 800; }
+.structure-catalog-title > span, .structure-catalog-learning > span, .structure-catalog-links > div > span, .structure-catalog-exploration-heading > span { color: var(--text-muted); font-size: .64rem; font-weight: 800; }
 .structure-catalog-title h2 { margin: 0; color: var(--text-primary); font-family: Georgia, "Noto Serif SC", serif; font-size: 1.45rem; font-weight: 500; }
 .structure-catalog-title small { color: var(--text-muted); }
 .structure-catalog-title strong { color: var(--formula-text-strong); font-family: Georgia, serif; font-size: 1.2rem; font-weight: 500; }
-.structure-catalog-learning p { margin: 0; color: var(--text-secondary); line-height: 1.6; }
-.structure-catalog-learning p + p { margin-top: .4rem; }
-.structure-catalog-learning span { display: block; margin-bottom: .15rem; }
+.structure-catalog-learning > span { display: block; margin-bottom: .2rem; }
+.structure-catalog-learning h3, .structure-catalog-learning p { margin: 0; }
+.structure-catalog-learning h3 { color: var(--text-primary); font-family: Georgia, "Noto Serif SC", serif; font-size: 1.45rem; font-weight: 500; }
+.structure-catalog-learning p { margin-top: .25rem; color: var(--text-secondary); line-height: 1.6; }
+.structure-catalog-learning details { margin-top: .55rem; }
+.structure-catalog-learning summary, .structure-catalog-knowledge summary { width: fit-content; color: var(--accent); cursor: pointer; font-size: .74rem; }
+.structure-catalog-learning ul, .structure-catalog-knowledge ul { display: flex; flex-wrap: wrap; gap: .35rem .8rem; margin: .55rem 0 0; padding-left: 1rem; color: var(--text-secondary); font-size: .75rem; }
+.structure-catalog-exploration { margin-top: 1rem; }
+.structure-catalog-exploration-heading { margin-bottom: .8rem; }
+.structure-catalog-exploration-heading h2 { margin: .15rem 0 0; color: var(--text-primary); font-family: Georgia, "Noto Serif SC", serif; font-size: 1.1rem; font-weight: 500; }
+.structure-catalog-knowledge { margin-bottom: .8rem; }
+.structure-catalog-knowledge li { display: grid; gap: .2rem; }
+.structure-catalog-knowledge li span { color: var(--text-secondary); line-height: 1.5; }
 .structure-catalog-links { display: grid; gap: .65rem; }
 .structure-catalog-links > div { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 .structure-catalog-links > div > span { width: 100%; }

@@ -12,6 +12,8 @@ from .application import (
     AtomCoordinate,
     DetectedFunctionalGroup,
     FunctionalGroupOccurrence,
+    StructuralTeachingFact,
+    StructuralTeachingProjection,
     StructureAnalysis,
     StructureConformer,
     StructureDepiction,
@@ -94,6 +96,103 @@ def _functional_groups(molecule: Chem.Mol) -> tuple[DetectedFunctionalGroup, ...
     return tuple(detected)
 
 
+def _multiple_bond_teaching(
+    molecule: Chem.Mol,
+    atom_indices: tuple[int, int],
+    *,
+    primary_key: str,
+    hybridization: Chem.HybridizationType,
+    hybridization_key: str,
+    geometry_key: str,
+    ideal_bond_angle: float,
+) -> StructuralTeachingProjection:
+    atoms = tuple(molecule.GetAtomWithIdx(index) for index in atom_indices)
+    observations: list[StructuralTeachingFact] = []
+    if all(atom.GetHybridization() == hybridization for atom in atoms):
+        observations.extend(
+            (
+                StructuralTeachingFact(key=hybridization_key, atom_indices=atom_indices),
+                StructuralTeachingFact(key=geometry_key, atom_indices=atom_indices),
+                StructuralTeachingFact(
+                    key="ideal_bond_angle",
+                    atom_indices=atom_indices,
+                    value=ideal_bond_angle,
+                ),
+            )
+        )
+    if primary_key == "carbon_carbon_double_bond" and molecule.GetNumHeavyAtoms() == 2:
+        observations.append(
+            StructuralTeachingFact(
+                key="approximately_planar_skeleton",
+                atom_indices=atom_indices,
+            )
+        )
+    return StructuralTeachingProjection(
+        primary=StructuralTeachingFact(key=primary_key, atom_indices=atom_indices),
+        observations=tuple(observations),
+    )
+
+
+def _structural_teaching(molecule: Chem.Mol) -> StructuralTeachingProjection | None:
+    """Project only structural signatures that RDKit's parsed graph establishes."""
+
+    for bond_type, primary_key, hybridization, hybridization_key, geometry_key, angle in (
+        (
+            Chem.BondType.TRIPLE,
+            "carbon_carbon_triple_bond",
+            Chem.HybridizationType.SP,
+            "sp_hybridization",
+            "linear_geometry",
+            180.0,
+        ),
+        (
+            Chem.BondType.DOUBLE,
+            "carbon_carbon_double_bond",
+            Chem.HybridizationType.SP2,
+            "sp2_hybridization",
+            "trigonal_planar_geometry",
+            120.0,
+        ),
+    ):
+        for bond in molecule.GetBonds():
+            atoms = (bond.GetBeginAtom(), bond.GetEndAtom())
+            if bond.GetBondType() != bond_type or any(atom.GetAtomicNum() != 6 for atom in atoms):
+                continue
+            return _multiple_bond_teaching(
+                molecule,
+                tuple(sorted(atom.GetIdx() for atom in atoms)),
+                primary_key=primary_key,
+                hybridization=hybridization,
+                hybridization_key=hybridization_key,
+                geometry_key=geometry_key,
+                ideal_bond_angle=angle,
+            )
+
+    if molecule.GetNumHeavyAtoms() == 1:
+        carbon = next((atom for atom in molecule.GetAtoms() if atom.GetAtomicNum() == 6), None)
+        if (
+            carbon
+            and carbon.GetHybridization() == Chem.HybridizationType.SP3
+            and carbon.GetTotalDegree() == 4
+        ):
+            atom_indices = (carbon.GetIdx(),)
+            return StructuralTeachingProjection(
+                primary=StructuralTeachingFact(
+                    key="tetrahedral_carbon",
+                    atom_indices=atom_indices,
+                ),
+                observations=(
+                    StructuralTeachingFact(key="sp3_hybridization", atom_indices=atom_indices),
+                    StructuralTeachingFact(
+                        key="ideal_bond_angle",
+                        atom_indices=atom_indices,
+                        value=109.5,
+                    ),
+                ),
+            )
+    return None
+
+
 class RdkitChemistryEngine:
     """Translate RDKit results into stable M06 DTO values."""
 
@@ -132,4 +231,5 @@ class RdkitChemistryEngine:
             depiction=_depict(molecule),
             conformer=_conformer(molecule),
             functional_groups=_functional_groups(molecule),
+            structural_teaching=_structural_teaching(molecule),
         )

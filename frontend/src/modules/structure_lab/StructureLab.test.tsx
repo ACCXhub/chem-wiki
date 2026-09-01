@@ -43,6 +43,7 @@ const validResult: AnalyzeStructureResponse = {
       occurrences: [{ atomIndices: [2] }],
     },
   ],
+  structuralTeaching: null,
   code: null,
   message: null,
 }
@@ -107,6 +108,7 @@ test('keeps loading and unsupported chemistry states explicit', async () => {
     depiction: null,
     conformer: null,
     functionalGroups: [],
+    structuralTeaching: null,
     code: 'unsupported_format',
     message: '当前仅支持 SMILES 与 molfile 结构输入',
   }))
@@ -161,6 +163,15 @@ test('presents catalog-linked ethene as a structure learning loop with its real 
     ...validResult,
     canonicalSmiles: 'C=C',
     formula: 'C2H4',
+    structuralTeaching: {
+      primary: { key: 'carbon_carbon_double_bond', atomIndices: [0, 1], value: null },
+      observations: [
+        { key: 'sp2_hybridization', atomIndices: [0, 1], value: null },
+        { key: 'trigonal_planar_geometry', atomIndices: [0, 1], value: null },
+        { key: 'ideal_bond_angle', atomIndices: [0, 1], value: 120 },
+        { key: 'approximately_planar_skeleton', atomIndices: [0, 1], value: null },
+      ],
+    },
     functionalGroups: [{
       ...validResult.functionalGroups[0],
       key: 'alkene',
@@ -211,9 +222,10 @@ test('presents catalog-linked ethene as a structure learning loop with its real 
   )
 
   expect(await screen.findByRole('heading', { name: '乙烯' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'C=C' })).toBeInTheDocument()
   expect(screen.getByText('碳碳双键是烯烃的特征结构。')).toBeInTheDocument()
-  expect(screen.getByText(/平面分子/)).toBeInTheDocument()
-  expect(screen.getByText(/sp² 杂化/)).toBeInTheDocument()
+  expect(screen.getByText('sp² 杂化')).toBeInTheDocument()
+  expect(screen.getByText('分子骨架近似平面')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '在方程实验室中查看乙烯催化加氢' }))
   expect(onNavigate).toHaveBeenCalledWith('/equation-lab?reaction=reaction%3Aethene-hydrogenation')
 })

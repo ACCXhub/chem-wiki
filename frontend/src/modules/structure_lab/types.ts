@@ -41,6 +41,17 @@ export interface FunctionalGroupDetection {
   occurrences: Array<{ atomIndices: number[] }>
 }
 
+export interface StructuralTeachingFact {
+  key: string
+  atomIndices: number[]
+  value: number | null
+}
+
+export interface StructuralTeachingProjection {
+  primary: StructuralTeachingFact | null
+  observations: StructuralTeachingFact[]
+}
+
 export interface AnalyzeStructureResponse {
   state: 'valid' | 'invalid' | 'unsupported'
   inputFormat: string
@@ -51,6 +62,7 @@ export interface AnalyzeStructureResponse {
   depiction: StructureDepiction | null
   conformer: StructureConformer | null
   functionalGroups: FunctionalGroupDetection[]
+  structuralTeaching: StructuralTeachingProjection | null
   code: string | null
   message: string | null
 }
