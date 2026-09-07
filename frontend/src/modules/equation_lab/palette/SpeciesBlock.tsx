@@ -78,10 +78,14 @@ export default function SpeciesBlock({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       aria-label={`拖拽物质 ${species.nameZh}`}
+      aria-expanded={placementOpen}
       title={species.nameEn ?? undefined}
     >
-      <ChemistryNotation formula={species.formula} charge={species.charge} />
-      {showChineseNames ? <strong>{species.nameZh}</strong> : null}
+      <span className="species-formula">
+        <ChemistryNotation formula={species.formula} charge={species.charge} />
+      </span>
+      {showChineseNames ? <strong className="species-name">{species.nameZh}</strong> : null}
+      {isRecent && !isFavorite ? <span className="recent-marker" aria-label="最近使用" title="最近使用">最近</span> : null}
       {onFavorite ? (
         <button
           type="button"
@@ -93,7 +97,6 @@ export default function SpeciesBlock({
           {isFavorite ? '★' : '☆'}
         </button>
       ) : null}
-      {isRecent && !isFavorite ? <span className="recent-marker" aria-label="最近使用" title="最近使用">•</span> : null}
       {placementOpen ? (
         <div className="species-placement" aria-label={`放置${species.nameZh}`}>
           <button type="button" onClick={(event) => add(event, 'reactants')}>放入反应物</button>

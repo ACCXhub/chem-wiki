@@ -759,88 +759,101 @@ export function EquationLabView({
   }, [autoBalance, draft, draftSignature, runBalance])
 
   return (
-    <main className="equation-lab-page">
+    <main className="equation-lab-page" aria-labelledby="equation-lab-title">
       <nav className="lab-breadcrumb" aria-label="面包屑导航">
         <button type="button" onClick={onBack}>元素周期表</button>
         <span aria-hidden="true">/</span>
-        <span>方程实验室</span>
+        <span>反应操作台</span>
       </nav>
 
       <header className="equation-lab-header">
         <div>
-          <h1>方程实验室</h1>
-          <p>把物质放入方程，逐步找到并完成已知反应。</p>
+          <p className="lab-kicker">Equation Lab</p>
+          <h1 id="equation-lab-title">反应操作台</h1>
         </div>
+        <p>组织反应物与生成物，匹配已知反应并核对守恒。</p>
       </header>
 
-      <EquationWorkbench
-        draft={draft}
-        focusedReaction={focusedReaction}
-        reactionDetail={reactionDetail}
-        reactionDetailLoading={reactionDetailLoading}
-        reactionDetailError={reactionDetailError}
-        result={result}
-        error={error}
-        loading={loading}
-        settled={settled}
-        autoBalance={autoBalance}
-        dragTarget={dragTarget}
-        duplicatePulse={duplicatePulse}
-        canUndo={history.past.length > 0}
-        canRedo={history.future.length > 0}
-        manualInputOpen={manualInputOpen}
-        onSubmit={handleComposerSubmit}
-        onModeChange={changeMode}
-        onAutoBalanceChange={setAutoBalance}
-        onClearDraft={() => commitDraft((current) => ({ ...current, reactants: [], products: [] }))}
-        onUndo={undo}
-        onRedo={redo}
-        onCopy={copyEquation}
-        onManualInputToggle={() => setManualInputOpen((open) => !open)}
-        onEnterEdit={enterEdit}
-        onNavigateToElement={(symbol) => { void navigateToElement(symbol) }}
-        onNavigateToStructure={(applicationId) => onNavigate?.(`/structure-lab?species=${encodeURIComponent(applicationId)}`)}
-        onRemove={(side, id) => changeSide(side, (items) => items.filter((item) => item.applicationId !== id))}
-        onPhase={(side, id, phase) => changeSide(side, (items) => updateParticipantPhase(items, id, phase))}
-        onWorkbenchDragOver={handleWorkbenchDragOver}
-        onWorkbenchDragLeave={handleWorkbenchDragLeave}
-        onParticipantDragOver={handleParticipantDragOver}
-        onParticipantDragStart={startParticipantDrag}
-        onDrop={handleDrop}
-        onDragEnd={clearDrag}
-      />
-
-      {manualInputOpen ? (
-        <form className="manual-equation-input" onSubmit={handleDirectSubmit}>
-          <input
-            id="direct-equation"
-            aria-label="化学方程式"
-            value={directEquation}
-            onChange={(event) => setDirectEquation(event.target.value)}
-            placeholder="输入完整方程式"
-            spellCheck={false}
+      <div className="equation-lab-shell">
+        <section className="equation-workspace" aria-label="方程编辑区">
+          <EquationWorkbench
+            draft={draft}
+            focusedReaction={focusedReaction}
+            reactionDetail={reactionDetail}
+            reactionDetailLoading={reactionDetailLoading}
+            reactionDetailError={reactionDetailError}
+            result={result}
+            error={error}
+            loading={loading}
+            settled={settled}
+            autoBalance={autoBalance}
+            dragTarget={dragTarget}
+            duplicatePulse={duplicatePulse}
+            canUndo={history.past.length > 0}
+            canRedo={history.future.length > 0}
+            manualInputOpen={manualInputOpen}
+            onSubmit={handleComposerSubmit}
+            onModeChange={changeMode}
+            onAutoBalanceChange={setAutoBalance}
+            onClearDraft={() => commitDraft((current) => ({ ...current, reactants: [], products: [] }))}
+            onUndo={undo}
+            onRedo={redo}
+            onCopy={copyEquation}
+            onManualInputToggle={() => setManualInputOpen((open) => !open)}
+            onEnterEdit={enterEdit}
+            onNavigateToElement={(symbol) => { void navigateToElement(symbol) }}
+            onNavigateToStructure={(applicationId) => onNavigate?.(`/structure-lab?species=${encodeURIComponent(applicationId)}`)}
+            onRemove={(side, id) => changeSide(side, (items) => items.filter((item) => item.applicationId !== id))}
+            onPhase={(side, id, phase) => changeSide(side, (items) => updateParticipantPhase(items, id, phase))}
+            onWorkbenchDragOver={handleWorkbenchDragOver}
+            onWorkbenchDragLeave={handleWorkbenchDragLeave}
+            onParticipantDragOver={handleParticipantDragOver}
+            onParticipantDragStart={startParticipantDrag}
+            onDrop={handleDrop}
+            onDragEnd={clearDrag}
           />
-          <span>{draft.mode === 'molecular' ? '分子' : draft.mode === 'ionic' ? '离子' : '净离子'}模式</span>
-          <div className="lab-examples" aria-label="方程式示例">
-            {EXAMPLES.map((example) => (
-              <button key={example.label} type="button" onClick={() => chooseExample(example)}>{example.label}</button>
-            ))}
-          </div>
-          <button type="submit" disabled={loading || !directEquation.trim()}>直接配平</button>
-        </form>
-      ) : null}
 
-      <ReactionCandidates
-        candidates={reactionCandidates}
-        selectedId={selectedReactionId}
-        loading={candidateLoading}
-        error={candidateError}
-        onSelect={(candidate) => setSelectedReactionId(candidate.consolidatedId)}
-      />
+          {manualInputOpen ? (
+            <form className="manual-equation-input" onSubmit={handleDirectSubmit}>
+              <input
+                id="direct-equation"
+                aria-label="化学方程式"
+                name="direct-equation"
+                autoComplete="off"
+                value={directEquation}
+                onChange={(event) => setDirectEquation(event.target.value)}
+                placeholder="输入完整方程式"
+                spellCheck={false}
+              />
+              <span>{draft.mode === 'molecular' ? '分子' : draft.mode === 'ionic' ? '离子' : '净离子'}模式</span>
+              <div className="lab-examples" aria-label="方程式示例">
+                {EXAMPLES.map((example) => (
+                  <button key={example.label} type="button" onClick={() => chooseExample(example)}>{example.label}</button>
+                ))}
+              </div>
+              <button type="submit" disabled={loading || !directEquation.trim()}>直接配平</button>
+            </form>
+          ) : null}
 
-      <section className="species-palette" aria-labelledby="palette-heading">
+          <ReactionCandidates
+            candidates={reactionCandidates}
+            selectedId={selectedReactionId}
+            loading={candidateLoading}
+            error={candidateError}
+            onSelect={(candidate) => setSelectedReactionId(candidate.consolidatedId)}
+          />
+        </section>
+
+        <aside
+          className={`species-palette ${preferences.showChineseNames ? 'names-visible' : 'names-hidden'}`}
+          aria-labelledby="palette-heading"
+          aria-label="物质发现"
+        >
           <div className="lab-heading compact">
-            <h2 id="palette-heading">物质库</h2>
+            <div>
+              <p className="lab-kicker">Species</p>
+              <h2 id="palette-heading">物质发现</h2>
+            </div>
             <div className="palette-heading-actions">
               <span>{catalogLoading ? '查询中…' : `${catalog.length} 项`}</span>
               <button
@@ -854,7 +867,7 @@ export function EquationLabView({
                   return next
                 })}
               >
-                中文名{preferences.showChineseNames ? ' ✓' : ''}
+                中文名 {preferences.showChineseNames ? '开' : '关'}
               </button>
             </div>
           </div>
@@ -867,6 +880,8 @@ export function EquationLabView({
               <span>搜索名称、别名或化学式</span>
               <input
                 type="search"
+                name="species-search"
+                autoComplete="off"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="例如：硫酸根 / sulfate / SO4"
@@ -886,22 +901,51 @@ export function EquationLabView({
             </div>
             {quickSpecies.length ? (
               <section className="quick-species-flow" aria-label="快捷物质">
-                {quickSpecies.map((species) => (
-                  <SpeciesBlock
-                    key={species.applicationId}
-                    species={species}
-                    isFavorite={preferences.favorites.includes(species.applicationId)}
-                    isRecent={preferences.recents.includes(species.applicationId)}
-                    showChineseNames={preferences.showChineseNames}
-                    onFavorite={toggleFavorite}
-                    onAddToSide={addToSide}
-                    onDragStart={startSpeciesDrag}
-                    onDragEnd={clearDrag}
-                  />
-                ))}
+                {favoriteSpecies.length ? <div className="quick-species-group">
+                  <h3>收藏</h3>
+                  <div className="quick-species-list">
+                    {favoriteSpecies.map((species) => (
+                      <SpeciesBlock
+                        key={species.applicationId}
+                        species={species}
+                        isFavorite
+                        showChineseNames={preferences.showChineseNames}
+                        onFavorite={toggleFavorite}
+                        onAddToSide={addToSide}
+                        onDragStart={startSpeciesDrag}
+                        onDragEnd={clearDrag}
+                      />
+                    ))}
+                  </div>
+                </div> : null}
+                {recentSpecies.length ? <div className="quick-species-group">
+                  <h3>最近</h3>
+                  <div className="quick-species-list">
+                    {recentSpecies.map((species) => (
+                      <SpeciesBlock
+                        key={species.applicationId}
+                        species={species}
+                        isRecent
+                        showChineseNames={preferences.showChineseNames}
+                        onFavorite={toggleFavorite}
+                        onAddToSide={addToSide}
+                        onDragStart={startSpeciesDrag}
+                        onDragEnd={clearDrag}
+                      />
+                    ))}
+                  </div>
+                </div> : null}
               </section>
             ) : null}
-            {catalogError ? <div className="catalog-state is-error" role="alert">{catalogError}</div> : null}
+            {catalogError ? (
+              <div className="catalog-state is-error" role="alert">
+                <strong>暂时无法加载物质目录</strong>
+                <span>{catalogError}</span>
+              </div>
+            ) : null}
+            {!catalogError && catalogLoading && !catalog.length ? (
+              <div className="catalog-state" aria-live="polite">正在准备物质目录…</div>
+            ) : null}
             {!catalogError && !catalogLoading && !catalog.length ? (
               <div className="catalog-state">没有匹配当前搜索与分类的物质。</div>
             ) : null}
@@ -943,8 +987,8 @@ export function EquationLabView({
             onDragEnd={clearDrag}
             showChineseNames={preferences.showChineseNames}
           />}
-      </section>
-
+        </aside>
+      </div>
     </main>
   )
 }

@@ -127,16 +127,19 @@ export default function EquationWorkbench({
   return (
     <form className="composer-panel equation-workbench" onSubmit={onSubmit}>
       <div className="composer-toolbar">
-        <div className="mode-switcher" role="group" aria-label="方程式模式">
-          {Object.entries(MODE_LABELS).map(([value, label]) => (
-            <button key={value} type="button" aria-pressed={draft.mode === value} onClick={() => onModeChange(value as EquationMode)}>
-              {label}
-            </button>
-          ))}
+        <div className="workbench-mode-control">
+          <span>方程类型</span>
+          <div className="mode-switcher" role="group" aria-label="方程式模式">
+            {Object.entries(MODE_LABELS).map(([value, label]) => (
+              <button key={value} type="button" aria-pressed={draft.mode === value} onClick={() => onModeChange(value as EquationMode)}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="workbench-controls">
-          <button className="history-button" type="button" onClick={onUndo} disabled={!canUndo} aria-label="撤销">↶</button>
-          <button className="history-button" type="button" onClick={onRedo} disabled={!canRedo} aria-label="重做">↷</button>
+          <button className="history-button" type="button" onClick={onUndo} disabled={!canUndo}>撤销</button>
+          <button className="history-button" type="button" onClick={onRedo} disabled={!canRedo}>重做</button>
           <button className="copy-equation" type="button" onClick={copy} disabled={!reactants.length && !products.length}>{copied ? '已复制' : '复制'}</button>
           <button className="manual-input-toggle" type="button" aria-expanded={manualInputOpen} onClick={onManualInputToggle}>手动输入</button>
           <button className="clear-draft" type="button" onClick={onClearDraft} disabled={!draft.reactants.length && !draft.products.length}>清空</button>
@@ -265,7 +268,16 @@ function DraftSideLine({ side, participants, dragTarget, duplicatePulse, onRemov
   const title = side === 'reactants' ? '反应物' : '生成物'
   return (
     <section className={`draft-side ${dragTarget?.side === side ? 'is-drag-target' : ''}`} aria-label={title} onDragOver={(event) => { event.stopPropagation(); onParticipantDragOver(event, { side }) }} onDrop={(event) => { event.stopPropagation(); onDrop(event, { side }) }}>
+      <header className="draft-side-heading">
+        <strong>{title}</strong>
+        <span>{participants.length ? `${participants.length} 项` : '等待添加'}</span>
+      </header>
       <div className="draft-participants">
+        {!participants.length && dragTarget?.side !== side ? (
+          <span className="draft-empty">
+            {side === 'reactants' ? '从物质发现添加反应物' : '添加生成物或选择候选反应'}
+          </span>
+        ) : null}
         {participants.map((participant, index) => (
           <span className="equation-term" key={participant.key}>
             {index ? <span className="equation-plus" aria-hidden="true">+</span> : null}
@@ -351,7 +363,7 @@ function ParticipantBlock({ participant, side, index, isDropTarget, isPulsing, o
   return (
     <div className={`draft-participant kind-${participant.entityKind ?? 'reference'} source-${participant.source} ${isDropTarget ? 'is-drop-target' : ''} ${isPulsing ? 'is-pulsing' : ''}`} draggable={isAnchor} tabIndex={isAnchor ? 0 : undefined} onClick={deferPhase} onDoubleClick={handleDoubleClick} onKeyDown={handleKeyDown} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragOver={(event) => { event.stopPropagation(); onDragOver(event, { side, index }) }} onDrop={(event) => { event.stopPropagation(); onDrop(event, { side, index }) }} aria-label={`${participant.nameZh}，${gestureLabel}`}>
       <ChemistryNotation formula={participant.formula} charge={participant.charge} phase={participant.phase} coefficient={participant.coefficient ?? undefined} />
-      <span>{participant.nameZh}</span>
+      <span className="participant-name">{participant.nameZh}</span>
       {phaseOpen && participant.applicationId ? <div className="phase-selector" role="group" aria-label={`${participant.nameZh}的物态`} onClick={(event) => event.stopPropagation()}>
         {([null, 's', 'l', 'g', 'aq'] as Array<EquationPhase | null>).map((phase) => <button key={phase ?? 'none'} type="button" aria-pressed={participant.phase === phase} onClick={() => { onPhase(side, participant.applicationId as string, phase); setPhaseOpen(false) }}>{phase ? `(${phase})` : '—'}</button>)}
       </div> : null}

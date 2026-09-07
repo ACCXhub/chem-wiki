@@ -1,5 +1,3 @@
-import type { CSSProperties } from 'react'
-
 import type { ReactionCandidate } from '../types'
 import { ChemistryEquation } from '../ChemistryNotation'
 
@@ -32,28 +30,29 @@ export default function ReactionCandidates({
   if (!candidates.length) return null
 
   const selected = candidates.find((candidate) => candidate.consolidatedId === selectedId)
-  const center = selected ?? candidates[0]
-  const alternatives = candidates
-    .filter((candidate) => candidate.consolidatedId !== center.consolidatedId)
-    .slice(0, ORBIT_LIMIT - 1)
-  const hiddenCount = Math.max(0, candidates.length - alternatives.length - 1)
+  const visibleCandidates = selected
+    ? [selected, ...candidates.filter((candidate) => candidate.consolidatedId !== selected.consolidatedId)].slice(0, ORBIT_LIMIT)
+    : candidates.slice(0, ORBIT_LIMIT)
+  const hiddenCount = Math.max(0, candidates.length - visibleCandidates.length)
 
   if (candidates.length === 1) return null
 
   return (
     <section className="reaction-candidates" aria-labelledby="candidate-heading">
       <div className="candidate-heading">
-        <h2 id="candidate-heading">候选反应</h2>
+        <div>
+          <span>Reaction Match</span>
+          <h2 id="candidate-heading">候选反应</h2>
+        </div>
         <span>{candidates.length} 个匹配</span>
       </div>
-      <div className="reaction-cluster" aria-label="相关反应">
-        <CandidateButton candidate={center} central onSelect={onSelect} />
-        {alternatives.map((candidate, index) => (
+      <div className="reaction-list" aria-label="相关反应">
+        {visibleCandidates.map((candidate, index) => (
           <CandidateButton
             key={candidate.consolidatedId}
             candidate={candidate}
-            index={index}
-            count={alternatives.length}
+            selected={candidate.consolidatedId === selectedId}
+            primary={!selectedId && index === 0}
             onSelect={onSelect}
           />
         ))}
@@ -65,32 +64,28 @@ export default function ReactionCandidates({
 
 function CandidateButton({
   candidate,
-  central = false,
-  index = 0,
-  count = 1,
+  selected,
+  primary,
   onSelect,
 }: {
   candidate: ReactionCandidate
-  central?: boolean
-  index?: number
-  count?: number
+  selected: boolean
+  primary: boolean
   onSelect: (candidate: ReactionCandidate) => void
 }) {
-  const angle = (-90 + (360 / count) * index) * (Math.PI / 180)
-  const style = central ? undefined : ({
-    '--candidate-x': `${Math.cos(angle) * 15}rem`,
-    '--candidate-y': `${Math.sin(angle) * 3.6}rem`,
-  } as CSSProperties)
   return (
     <button
-      className={`reaction-candidate ${central ? 'is-central' : 'is-alternative'}`}
+      className={`reaction-candidate ${selected || primary ? 'is-central' : 'is-alternative'} ${selected ? 'is-selected' : ''} ${primary ? 'is-primary' : ''}`}
       type="button"
-      style={style}
       onClick={() => onSelect(candidate)}
       aria-label={`选择反应 ${candidate.nameZh}`}
+      aria-pressed={selected}
     >
-      <strong>{candidate.equation ? <ChemistryEquation expression={candidate.equation} /> : candidateLabel(candidate)}</strong>
-      <span>{candidate.nameZh}</span>
+      <span className="candidate-content">
+        <strong>{candidate.equation ? <ChemistryEquation expression={candidate.equation} /> : candidateLabel(candidate)}</strong>
+        <span>{candidate.nameZh}</span>
+      </span>
+      {selected ? <span className="candidate-selected-label">已选择</span> : null}
     </button>
   )
 }

@@ -118,6 +118,47 @@ function dragData() {
   return { effectAllowed: '', dropEffect: '', setData: vi.fn(), setDragImage: vi.fn() }
 }
 
+test('exposes a task-first reaction workbench and a separate species discovery landmark', async () => {
+  render(
+    <EquationLabView
+      onBack={() => undefined}
+      onBalance={() => Promise.resolve(result)}
+      onSearch={() => Promise.resolve(molecularCatalog)}
+    />,
+  )
+
+  await screen.findByText('氢气')
+  expect(screen.getByRole('main', { name: '反应操作台' })).toBeInTheDocument()
+  expect(screen.getByRole('region', { name: '方程编辑区' })).toBeInTheDocument()
+  expect(screen.getByRole('complementary', { name: '物质发现' })).toBeInTheDocument()
+})
+
+test('marks only the chosen reaction candidate as selected', async () => {
+  const candidates = [
+    reactionCandidate('reaction:water', '氢气燃烧', molecularCatalog[2]),
+    reactionCandidate('reaction:peroxide', '生成过氧化氢', species('h2o2', '过氧化氢', 'H2O2')),
+  ]
+  render(
+    <EquationLabView
+      onBack={() => undefined}
+      onBalance={() => Promise.resolve(result)}
+      onSearch={() => Promise.resolve(molecularCatalog)}
+      onFindCandidates={() => Promise.resolve(candidates)}
+    />,
+  )
+
+  await screen.findByText('氢气')
+  addMaterial('氢气', 'reactants')
+  const water = await screen.findByRole('button', { name: '选择反应 氢气燃烧' })
+  const peroxide = screen.getByRole('button', { name: '选择反应 生成过氧化氢' })
+  expect(water).toHaveAttribute('aria-pressed', 'false')
+  expect(peroxide).toHaveAttribute('aria-pressed', 'false')
+
+  fireEvent.click(peroxide)
+  expect(water).toHaveAttribute('aria-pressed', 'false')
+  expect(peroxide).toHaveAttribute('aria-pressed', 'true')
+})
+
 test('drags H2 and O2 into reactants and H2O into products, then auto-balances', async () => {
   const onBalance = vi.fn(() => Promise.resolve(result))
   const onSearch = vi.fn(() => Promise.resolve(molecularCatalog))
