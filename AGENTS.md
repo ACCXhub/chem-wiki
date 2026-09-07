@@ -2,6 +2,10 @@
 
 本文件只定义 Chem Wiki 的稳定架构与领域边界。通用代理行为、验证纪律、任务状态和条件式 Skill 的调用由用户级 `AGENTS.md` 与已安装 Skill 拥有；不要在仓库内复制它们。
 
+## 项目 Logical Lead
+
+在 Chem Wiki 当前任务中，Codex Root Agent 是项目 Logical Lead：从 Git、本文件、`docs/PRODUCT_ROADMAP.md`、相关 decision 与当前 handoff 恢复真实项目状态；变更前确认 scope 与 canonical owner，保护冻结的化学/领域边界，将任务集成到现有架构，并在需要时把 durable project state 收敛回既有 canonical documentation owner。Root Agent 保留本任务最终的项目级集成责任。
+
 ## 模块边界
 
 - 一轮只闭环一个模块或一项连贯能力。跨模块只依赖包的公共入口，不直连内部文件、私有 helper、外部来源格式或存储细节；`backend/src/chem_wiki/main.py` 是 FastAPI composition root。

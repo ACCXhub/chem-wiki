@@ -224,6 +224,29 @@ H2O 的液态/气态热化学与真实熔化、汽化记录随所选物态更新
 无 phase fact 的物质显示中性不可用状态；无 accepted Structure 时仍可学习物态并进入既有自由结构分析。Equation Lab
 继续由 EquationDraft 拥有物态编辑与历史，不由 catalog 默认值静默覆盖。reaction ΔH 与 bond enthalpy UI 留待 Phase 3C.2。
 
+## Phase 3C.2 — Reaction Energetics
+
+本阶段建立事实热化学、派生反应能量与后续估算之间的产品边界。
+
+### Phase 3C.2A — Standard Reaction Enthalpy
+
+目标语义流为：canonical balanced Reaction 的参与者与计量系数，加上每个参与者的物态和该物态下的标准生成焓数据，派生标准反应焓 `ΔrH°`。
+
+按 Hess 定律使用标准生成焓计算：
+
+`ΔrH° = Σ ν ΔfH°(products) − Σ ν ΔfH°(reactants)`
+
+- Reaction identity、participants、stoichiometry 与 published reaction facts 继续由 `reaction_core` 拥有。
+- phase-specific thermochemistry 继续是 `knowledge_catalog` 拥有的 canonical factual data。
+- 计算得到的 `ΔrH°` 是 derived application/read projection，不是新的 canonical experimental fact。
+- learner-facing React surfaces 只消费该派生投影，不维护独立的 thermochemistry truth。
+
+任一必需参与者或其 phase-specific `ΔfH°` 缺失时，结果必须明确为 incomplete/unavailable，不得静默估算。Phase 3C.2A 不回退到 average bond enthalpy。
+
+### Phase 3C.2B — Bond Enthalpy Estimation
+
+后续可在适用范围内使用现有 educational bond-enthalpy data 建立有界估算路径；结果必须明确标为 estimate，不得作为 canonical thermochemical truth。本阶段仅记录该方向，不设计或实现 Phase 3C.2B。
+
 ## Phase 4 — Reaction process / mechanism
 
 Mechanism work begins after the product can already navigate Reaction ↔ Species ↔ Structure.
