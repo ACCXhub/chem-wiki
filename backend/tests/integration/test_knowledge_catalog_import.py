@@ -2,6 +2,7 @@ import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
@@ -320,6 +321,22 @@ def test_release_import_is_complete_idempotent_and_queryable(
         )
         assert any(item.url and "moe.gov.cn" in item.url for item in detail.sources)
         assert all("src:" not in item.name for item in detail.sources)
+        assert detail.standard_reaction_enthalpy.status == "unavailable"
+        assert detail.standard_reaction_enthalpy.value_kj_mol is None
+        assert detail.standard_reaction_enthalpy.missing_participants
+
+        hydrogen_combustion = reader.get_reaction_detail(
+            "reaction:inorganic:reaction:hydrogen-combustion"
+        )
+        assert hydrogen_combustion is not None
+        reaction_enthalpy = hydrogen_combustion.standard_reaction_enthalpy
+        assert reaction_enthalpy.status == "complete"
+        assert reaction_enthalpy.value_kj_mol == Decimal("-571.656742")
+        assert reaction_enthalpy.classification == "exothermic"
+        assert reaction_enthalpy.reference_temperature_k == Decimal("298.150000")
+        assert reaction_enthalpy.standard_pressure_bar == Decimal("1.000000")
+        assert [item.phase for item in reaction_enthalpy.contributions] == ["g", "g", "l"]
+        assert all(item.sources for item in reaction_enthalpy.contributions)
 
         catalog_reaction = reader.get_reaction(phenol_resin.consolidated_id)
         assert catalog_reaction is not None
@@ -380,6 +397,16 @@ def test_release_import_is_complete_idempotent_and_queryable(
         assert detail_payload["phenomena"]
         assert detail_payload["relatedSpecies"]
         assert detail_payload["sources"]
+        assert detail_payload["standardReactionEnthalpy"]["status"] == "unavailable"
+
+        enthalpy_response = TestClient(create_app()).get(
+            "/v1/catalog/reactions/reaction:inorganic:reaction:hydrogen-combustion/detail"
+        )
+        assert enthalpy_response.status_code == 200
+        enthalpy_payload = enthalpy_response.json()["standardReactionEnthalpy"]
+        assert Decimal(str(enthalpy_payload["valueKjMol"])) == Decimal("-571.656742")
+        assert enthalpy_payload["classification"] == "exothermic"
+        assert [item["phase"] for item in enthalpy_payload["contributions"]] == ["g", "g", "l"]
 
         knowledge_response = TestClient(create_app()).get(
             "/v1/catalog/knowledge",

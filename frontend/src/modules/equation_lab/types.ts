@@ -99,11 +99,50 @@ export interface CatalogSourceAttribution {
   url: string | null
 }
 
+export type CatalogDecimal = number | string
+
+export interface CatalogReactionEnthalpyContribution {
+  role: 'reactant' | 'product'
+  nameZh: string | null
+  formula: string | null
+  phase: string
+  coefficient: CatalogDecimal
+  deltaFHKjMol: CatalogDecimal
+  signedContributionKjMol: CatalogDecimal
+  sources: CatalogSourceAttribution[]
+}
+
+export interface CatalogReactionEnthalpyMissingParticipant {
+  role: string
+  nameZh: string | null
+  formula: string | null
+  phase: string | null
+  reason:
+    | 'unresolved_species'
+    | 'phase_unavailable'
+    | 'invalid_stoichiometry'
+    | 'formation_enthalpy_unavailable'
+    | 'reference_conditions_unavailable'
+}
+
+export interface CatalogStandardReactionEnthalpy {
+  status: 'complete' | 'unavailable'
+  valueKjMol: CatalogDecimal | null
+  unit: 'kJ/mol'
+  classification: 'exothermic' | 'endothermic' | 'thermoneutral' | null
+  method: 'standard_formation_enthalpy'
+  referenceTemperatureK: CatalogDecimal | null
+  standardPressureBar: CatalogDecimal | null
+  contributions: CatalogReactionEnthalpyContribution[]
+  missingParticipants: CatalogReactionEnthalpyMissingParticipant[]
+}
+
 export interface CatalogReactionDetail extends CatalogReactionEntry {
   concepts: CatalogReactionKnowledge[]
   phenomena: CatalogReactionKnowledge[]
   relatedSpecies: CatalogRelatedSpecies[]
   sources: CatalogSourceAttribution[]
+  standardReactionEnthalpy: CatalogStandardReactionEnthalpy
 }
 
 export interface ReactionCandidateQuery {

@@ -4,6 +4,7 @@ import ChemistryNotation, { ChemistryEquation } from '../ChemistryNotation'
 import type {
   BalanceEquationResponse,
   CatalogReactionDetail,
+  CatalogStandardReactionEnthalpy,
   EquationDraft,
   EquationDraftParticipant,
   EquationMode,
@@ -386,51 +387,120 @@ function FocusedReactionKnowledge({
       {loading ? <span className="reaction-detail-state">正在加载反应知识…</span> : null}
       {error ? <span className="reaction-detail-state is-error">{error}</span> : null}
       {detail ? (
-        <div className="reaction-learning-detail">
-          {detail.phenomena.map((item) => (
-            <details key={item.consolidatedId} className="reaction-learning-item">
-              <summary>现象 · {item.displayNameZh}</summary>
-              <p>{item.contentZh}</p>
-            </details>
-          ))}
-          {detail.concepts.map((item) => (
-            <details key={item.consolidatedId} className="reaction-learning-item">
-              <summary>概念 · {item.displayNameZh}</summary>
-              <p>{item.contentZh}</p>
-            </details>
-          ))}
-          {detail.relatedSpecies.length ? (
-            <details className="reaction-related-species">
-              <summary>相关物质 · {detail.relatedSpecies.length}</summary>
-              <div className="reaction-species-list">
-                {detail.relatedSpecies.map((species) => (
-                  <div className="reaction-species-item" key={species.applicationId}>
-                    <span><ChemistryNotation formula={species.formula} charge={species.charge} /><strong>{species.nameZh}</strong></span>
-                    <div>
-                      {Object.keys(species.composition ?? {}).map((symbol) => (
-                        <button key={symbol} type="button" onClick={() => onNavigateToElement(symbol)}>{symbol} 元素</button>
-                      ))}
-                      {species.structureAvailable ? (
-                        <button type="button" onClick={() => onNavigateToStructure(species.applicationId)}>查看结构</button>
-                      ) : null}
+        <>
+          <StandardReactionEnthalpy projection={detail.standardReactionEnthalpy} />
+          <div className="reaction-learning-detail">
+            {detail.phenomena.map((item) => (
+              <details key={item.consolidatedId} className="reaction-learning-item">
+                <summary>现象 · {item.displayNameZh}</summary>
+                <p>{item.contentZh}</p>
+              </details>
+            ))}
+            {detail.concepts.map((item) => (
+              <details key={item.consolidatedId} className="reaction-learning-item">
+                <summary>概念 · {item.displayNameZh}</summary>
+                <p>{item.contentZh}</p>
+              </details>
+            ))}
+            {detail.relatedSpecies.length ? (
+              <details className="reaction-related-species">
+                <summary>相关物质 · {detail.relatedSpecies.length}</summary>
+                <div className="reaction-species-list">
+                  {detail.relatedSpecies.map((species) => (
+                    <div className="reaction-species-item" key={species.applicationId}>
+                      <span><ChemistryNotation formula={species.formula} charge={species.charge} /><strong>{species.nameZh}</strong></span>
+                      <div>
+                        {Object.keys(species.composition ?? {}).map((symbol) => (
+                          <button key={symbol} type="button" onClick={() => onNavigateToElement(symbol)}>{symbol} 元素</button>
+                        ))}
+                        {species.structureAvailable ? (
+                          <button type="button" onClick={() => onNavigateToStructure(species.applicationId)}>查看结构</button>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </details>
-          ) : null}
-          {detail.sources.length ? (
-            <details className="reaction-sources">
-              <summary>来源</summary>
-              <ul>{detail.sources.map((source) => (
-                <li key={`${source.name}:${source.url ?? ''}`}>
-                  {source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.name}</a> : source.name}
-                </li>
-              ))}</ul>
-            </details>
-          ) : null}
-        </div>
+                  ))}
+                </div>
+              </details>
+            ) : null}
+            {detail.sources.length ? (
+              <details className="reaction-sources">
+                <summary>来源</summary>
+                <ul>{detail.sources.map((source) => (
+                  <li key={`${source.name}:${source.url ?? ''}`}>
+                    {source.url ? <a href={source.url} target="_blank" rel="noreferrer">{source.name}</a> : source.name}
+                  </li>
+                ))}</ul>
+              </details>
+            ) : null}
+          </div>
+        </>
       ) : null}
+    </section>
+  )
+}
+
+const ENTHALPY_CLASSIFICATION_LABELS = {
+  exothermic: '放热反应',
+  endothermic: '吸热反应',
+  thermoneutral: '热效应接近零',
+} as const
+
+function formatDecimal(value: number | string, fractionDigits = 2): string {
+  const numeric = Number(value)
+  const absolute = Math.abs(numeric).toLocaleString('zh-CN', {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  })
+  return `${numeric < 0 ? '−' : numeric > 0 ? '+' : ''}${absolute}`
+}
+
+function StandardReactionEnthalpy({
+  projection,
+}: {
+  projection: CatalogStandardReactionEnthalpy
+}) {
+  if (projection.status === 'unavailable' || projection.valueKjMol === null) {
+    return (
+      <section className="reaction-enthalpy is-unavailable" aria-label="标准反应焓">
+        <strong>标准反应焓暂不可用</strong>
+        <p>需要每个参与物质在反应指定物态下的标准生成焓。</p>
+        {projection.missingParticipants.map((participant, index) => (
+          <p key={`${participant.role}:${participant.formula ?? participant.nameZh}:${index}`}>
+            缺少 {participant.nameZh ?? participant.formula ?? '参与物质'}
+            {participant.phase ? ` (${participant.phase})` : ''} 的标准生成焓数据
+          </p>
+        ))}
+      </section>
+    )
+  }
+
+  const classification = projection.classification
+    ? ENTHALPY_CLASSIFICATION_LABELS[projection.classification]
+    : null
+  return (
+    <section className={`reaction-enthalpy is-${projection.classification}`} aria-label="标准反应焓">
+      <div className="reaction-enthalpy-summary">
+        <strong>ΔrH° {formatDecimal(projection.valueKjMol)} {projection.unit}</strong>
+        {classification ? <span>{classification}</span> : null}
+      </div>
+      <p>
+        <span>由各物质的标准生成焓计算</span>
+        {projection.referenceTemperatureK !== null && projection.standardPressureBar !== null
+          ? <span> · {Number(projection.referenceTemperatureK).toLocaleString('zh-CN')} K，{Number(projection.standardPressureBar).toLocaleString('zh-CN')} bar</span>
+          : ''}
+      </p>
+      <details>
+        <summary>计算依据 · {projection.contributions.length} 项</summary>
+        <ul>
+          {projection.contributions.map((contribution, index) => (
+            <li key={`${contribution.role}:${contribution.formula}:${contribution.phase}:${index}`}>
+              <span>{contribution.coefficient} × ΔfH° {contribution.formula}({contribution.phase})</span>
+              <strong>{formatDecimal(contribution.signedContributionKjMol)} kJ/mol</strong>
+              {contribution.sources.length ? <small>{contribution.sources.map((source) => source.name).join(' · ')}</small> : null}
+            </li>
+          ))}
+        </ul>
+      </details>
     </section>
   )
 }

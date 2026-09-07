@@ -120,6 +120,45 @@ class CatalogSourceAttributionResult(CatalogDto):
     url: str | None
 
 
+class CatalogReactionEnthalpyContribution(CatalogDto):
+    role: Literal["reactant", "product"]
+    name_zh: str | None
+    formula: str | None
+    phase: str
+    coefficient: Decimal
+    delta_f_h_kj_mol: Decimal
+    signed_contribution_kj_mol: Decimal
+    sources: list[CatalogSourceAttributionResult] = Field(default_factory=list)
+
+
+class CatalogReactionEnthalpyMissingParticipant(CatalogDto):
+    role: str
+    name_zh: str | None
+    formula: str | None
+    phase: str | None
+    reason: Literal[
+        "unresolved_species",
+        "phase_unavailable",
+        "invalid_stoichiometry",
+        "formation_enthalpy_unavailable",
+        "reference_conditions_unavailable",
+    ]
+
+
+class CatalogStandardReactionEnthalpy(CatalogDto):
+    status: Literal["complete", "unavailable"]
+    value_kj_mol: Decimal | None
+    unit: Literal["kJ/mol"] = "kJ/mol"
+    classification: Literal["exothermic", "endothermic", "thermoneutral"] | None
+    method: Literal["standard_formation_enthalpy"] = "standard_formation_enthalpy"
+    reference_temperature_k: Decimal | None
+    standard_pressure_bar: Decimal | None
+    contributions: list[CatalogReactionEnthalpyContribution] = Field(default_factory=list)
+    missing_participants: list[CatalogReactionEnthalpyMissingParticipant] = Field(
+        default_factory=list
+    )
+
+
 class CatalogSpeciesPhaseFact(CatalogDto):
     standard_phase: Literal["s", "l", "g", "aq"]
     allowed_teaching_phases: list[Literal["s", "l", "g", "aq"]]
@@ -183,3 +222,4 @@ class CatalogReactionDetail(CatalogReactionResult):
     phenomena: list[CatalogKnowledgeResult]
     related_species: list[CatalogRelatedSpeciesResult]
     sources: list[CatalogSourceAttributionResult]
+    standard_reaction_enthalpy: CatalogStandardReactionEnthalpy

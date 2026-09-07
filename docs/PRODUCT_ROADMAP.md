@@ -25,6 +25,7 @@ The current product baseline is the working M00–M07 implementation on `main`, 
 - known Reaction matching, direction/orientation, completion and deterministic ranking;
 - catalog-backed Builder composition completion and Reaction learning detail;
 - KaTeX + mhchem chemistry/equation display with Reaction → Element / Structure navigation;
+- phase-matched standard reaction enthalpy projection in the existing Reaction learning detail;
 - Structure Lab with Ketcher, RDKit and 3Dmol.js;
 - FunctionalGroup detection;
 - compact Equation Lab species palette and Builder interaction.
@@ -228,7 +229,7 @@ H2O 的液态/气态热化学与真实熔化、汽化记录随所选物态更新
 
 本阶段建立事实热化学、派生反应能量与后续估算之间的产品边界。
 
-### Phase 3C.2A — Standard Reaction Enthalpy
+### Phase 3C.2A — Standard Reaction Enthalpy（已实现）
 
 目标语义流为：canonical balanced Reaction 的参与者与计量系数，加上每个参与者的物态和该物态下的标准生成焓数据，派生标准反应焓 `ΔrH°`。
 
@@ -242,6 +243,8 @@ H2O 的液态/气态热化学与真实熔化、汽化记录随所选物态更新
 - learner-facing React surfaces 只消费该派生投影，不维护独立的 thermochemistry truth。
 
 任一必需参与者或其 phase-specific `ΔfH°` 缺失时，结果必须明确为 incomplete/unavailable，不得静默估算。Phase 3C.2A 不回退到 average bond enthalpy。
+
+现有 `GET /v1/catalog/reactions/{consolidated_id}/detail` 已在 `knowledge_catalog` read boundary 内完成精确 Species + phase join、共同参考条件选择与 Hess 求和；完整结果携带符号分类、逐参与者贡献和来源，缺项结果列出所需物质及物态。Equation Lab 的既有当前反应区域只展示该派生 DTO，不在 React 重算。
 
 ### Phase 3C.2B — Bond Enthalpy Estimation
 

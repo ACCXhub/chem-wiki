@@ -22,6 +22,7 @@ from .persistence import (
     CatalogStructureRecordRow,
     CatalogTeachingProjectionRow,
 )
+from .reaction_energetics import PhaseFormationEnthalpy, derive_standard_reaction_enthalpy
 from .read_model import (
     CatalogBondEnthalpyResult,
     CatalogKnowledgeLinkResult,
@@ -433,6 +434,33 @@ class PostgresCatalogReader:
             .where(CatalogSourceAttributionRow.source_ref.in_(reaction.provenance_refs))
             .order_by(CatalogSourceAttributionRow.source_ref)
         ).all()
+        thermochemistry_rows = (
+            self._session.scalars(
+                select(CatalogSpeciesThermochemistryRow)
+                .where(CatalogSpeciesThermochemistryRow.species_id.in_(participant_species_ids))
+                .order_by(
+                    CatalogSpeciesThermochemistryRow.species_id,
+                    CatalogSpeciesThermochemistryRow.phase,
+                    CatalogSpeciesThermochemistryRow.temperature_k,
+                )
+            ).all()
+            if participant_species_ids
+            else []
+        )
+        standard_reaction_enthalpy = derive_standard_reaction_enthalpy(
+            reaction,
+            [
+                PhaseFormationEnthalpy(
+                    species_id=row.species_id,
+                    phase=row.phase,
+                    temperature_k=row.temperature_k,
+                    standard_pressure_bar=row.standard_pressure_bar,
+                    delta_f_h_kj_mol=row.delta_f_h_kj_mol,
+                    sources=tuple(self._source_results(row.source_refs)),
+                )
+                for row in thermochemistry_rows
+            ],
+        )
         return CatalogReactionDetail(
             **reaction.model_dump(),
             concepts=[item for item in knowledge if item.source_type == "concept"],
@@ -441,6 +469,7 @@ class PostgresCatalogReader:
             sources=[
                 CatalogSourceAttributionResult(name=row.name, url=row.url) for row in source_rows
             ],
+            standard_reaction_enthalpy=standard_reaction_enthalpy,
         )
 
     def get_reactions_by_consolidated_ids(

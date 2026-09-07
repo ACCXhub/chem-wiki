@@ -61,7 +61,8 @@
 - `GET /v1/catalog/reactions/{consolidated_id}` 提供 catalog Reaction 的 materialization state、
   原因、原始 coefficient、non-species ref 与 application target mapping，供后续阶段追溯。
 - `GET /v1/catalog/reactions/{consolidated_id}/detail` 投影 canonical participants、可逆性、类型、条件、
-  reviewed concepts/phenomena、related species、Structure 可用性与已解析 source attribution；空字段省略。
+  reviewed concepts/phenomena、related species、Structure 可用性、已解析 source attribution，以及 phase-matched
+  standard reaction enthalpy derived projection；空字段省略。
 - `GET /v1/catalog/species/{application_species_id}/structure` 返回 accepted Structure entry，
   供 Structure Lab 从稳定 application species UUID 直接载入已知结构。
 - `GET /v1/catalog/knowledge` 按 stable knowledge ID、source package/type、linked species、
@@ -69,6 +70,19 @@
 - `GET /v1/catalog/species/{application_species_id}/thermochemistry` 返回 standard/default phase、
   allowed teaching phases、全部 phase-specific thermochemistry 与相关 phase transitions。H2O(g)/H2O(l)
   保持同一 application species。14 条 bond enthalpy 只提供内部 repository read seam，未增加 learner API 或计算。
+
+## Standard reaction enthalpy projection
+
+- `knowledge_catalog.reaction_energetics` 在 Reaction detail read boundary 内连接既有 canonical participant
+  identity、正计量系数和明确物态，与同一 Species + phase 的 `ΔfH°` 记录；只查询当前 Reaction 的参与物质。
+- 完整结果要求每个参与者都有 phase-exact `ΔfH°`，且所有记录共享同一参考温度与标准压力。products 取正、
+  reactants 取负后按 Hess 定律求和；结果保持 derived projection，不写入第二套 Reaction 或热化学事实。
+- identity、物态、有效计量系数、phase-specific `ΔfH°` 或共同参考条件任一缺失时，DTO 返回
+  `unavailable`、不返回数值，并列出缺失参与者；不回退到 average bond enthalpy。
+- 当前 pinned release 有 5 条 Reaction 可完整计算：氨催化氧化、合成氨、氢气燃烧、一氧化氮氧化与
+  二氧化氮二聚。其余 Reaction 的缺项状态反映现有 20 条 phase-specific thermochemistry 的真实覆盖范围。
+- Equation Lab 在既有当前反应知识区展示数值、放热/吸热分类、参考条件，并以渐进展开呈现参与者贡献和来源；
+  unavailable 状态明确展示所缺物质与物态。React 只格式化 DTO，不执行 Hess 求和。
 
 ## Release-aware local startup
 
@@ -93,7 +107,7 @@
 ## Preserved scope
 
 - rules 与 curriculum 继续留在 consolidated release，不强塞进应用表或前端常量。
-- 本阶段只激活 data/read seams；未新增 Structure learner UI，未计算 reaction enthalpy，未从 formula
-  推断 bond changes。
+- Phase 3C.2A 只增加 formation-enthalpy-backed derived projection；未实现 average bond-enthalpy estimate，
+  未从 formula 推断 bond changes。
 - Equation Lab 的既有 M05/M07 视觉、EquationDraft 与 Reaction Builder 继续由对应模块拥有；
   Atom Mapping、Bond Diff、Mechanism 与 Synthesis 未在本轮引入。

@@ -393,6 +393,21 @@ test('shows reviewed reaction learning detail and navigates to element and struc
     }],
     relatedSpecies: [{ ...molecularCatalog[2], structureAvailable: true }],
     sources: [{ name: '普通高中化学课程标准', url: 'https://example.test/source' }],
+    standardReactionEnthalpy: {
+      status: 'complete',
+      valueKjMol: '-571.656742',
+      unit: 'kJ/mol',
+      classification: 'exothermic',
+      method: 'standard_formation_enthalpy',
+      referenceTemperatureK: '298.15',
+      standardPressureBar: '1.0',
+      contributions: [
+        { role: 'reactant', nameZh: '氢气', formula: 'H2', phase: 'g', coefficient: '2', deltaFHKjMol: '0', signedContributionKjMol: '0', sources: [] },
+        { role: 'reactant', nameZh: '氧气', formula: 'O2', phase: 'g', coefficient: '1', deltaFHKjMol: '0', signedContributionKjMol: '0', sources: [] },
+        { role: 'product', nameZh: '水', formula: 'H2O', phase: 'l', coefficient: '2', deltaFHKjMol: '-285.828371', signedContributionKjMol: '-571.656742', sources: [{ name: 'Cantera NASA condensed thermochemistry', url: null }] },
+      ],
+      missingParticipants: [],
+    },
   }
   const onNavigate = vi.fn()
   render(
@@ -409,6 +424,11 @@ test('shows reviewed reaction learning detail and navigates to element and struc
 
   await screen.findByText('氢气')
   addMaterial('氢气', 'reactants')
+  expect(await screen.findByText('ΔrH° −571.66 kJ/mol')).toBeInTheDocument()
+  expect(screen.getByText('放热反应')).toBeInTheDocument()
+  expect(screen.getByText('由各物质的标准生成焓计算')).toBeInTheDocument()
+  fireEvent.click(screen.getByText('计算依据 · 3 项'))
+  expect(screen.getByText('2 × ΔfH° H2O(l)')).toBeInTheDocument()
   expect(await screen.findByText('现象 · 氢气燃烧')).toBeInTheDocument()
   expect(screen.getByText('概念 · 反应守恒')).toBeInTheDocument()
   fireEvent.click(screen.getByText('来源'))
@@ -421,6 +441,49 @@ test('shows reviewed reaction learning detail and navigates to element and struc
   await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('/elements/element-h'))
   fireEvent.click(screen.getByRole('button', { name: '查看结构' }))
   expect(onNavigate).toHaveBeenCalledWith('/structure-lab?species=h2o')
+})
+
+test('shows an unavailable standard reaction enthalpy when exact phase data is missing', async () => {
+  const candidate = reactionCandidate('reaction:water', '水的生成', molecularCatalog[2])
+  const detail: CatalogReactionDetail = {
+    ...candidate,
+    concepts: [],
+    phenomena: [],
+    relatedSpecies: [],
+    sources: [],
+    standardReactionEnthalpy: {
+      status: 'unavailable',
+      valueKjMol: null,
+      unit: 'kJ/mol',
+      classification: null,
+      method: 'standard_formation_enthalpy',
+      referenceTemperatureK: null,
+      standardPressureBar: null,
+      contributions: [],
+      missingParticipants: [{
+        role: 'product',
+        nameZh: '水',
+        formula: 'H2O',
+        phase: 'l',
+        reason: 'formation_enthalpy_unavailable',
+      }],
+    },
+  }
+  render(
+    <EquationLabView
+      onBack={() => undefined}
+      onBalance={() => Promise.resolve(result)}
+      onSearch={() => Promise.resolve(molecularCatalog)}
+      onFindCandidates={() => Promise.resolve([candidate])}
+      onLoadReactionDetail={() => Promise.resolve(detail)}
+    />,
+  )
+
+  await screen.findByText('氢气')
+  addMaterial('氢气', 'reactants')
+  expect(await screen.findByText('标准反应焓暂不可用')).toBeInTheDocument()
+  expect(screen.getByText('缺少 水 (l) 的标准生成焓数据')).toBeInTheDocument()
+  expect(screen.queryByText(/ΔrH° [−+]?\d/)).not.toBeInTheDocument()
 })
 
 test('keeps direct catalog selection primary while exposing the controlled builder', async () => {

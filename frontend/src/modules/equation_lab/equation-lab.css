@@ -165,6 +165,17 @@
 .focused-reaction-summary > .chem-equation { color: #f1d087; font-size: .82rem; }
 .reaction-detail-state { color: #789087; }
 .reaction-detail-state.is-error { color: #efb8aa; }
+.reaction-enthalpy { display: grid; gap: .3rem; padding: .45rem .55rem; border-left: 2px solid var(--accent-warm); background: color-mix(in srgb, var(--accent-warm) 8%, var(--surface-muted)); }
+.reaction-enthalpy.is-unavailable { border-left-color: var(--border-strong); background: var(--surface-muted); }
+.reaction-enthalpy-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .65rem; }
+.reaction-enthalpy-summary strong { color: var(--formula-text-strong); font-size: .8rem; }
+.reaction-enthalpy-summary span { color: var(--accent-warm-text); font-weight: 700; }
+.reaction-enthalpy > p { margin: 0; color: var(--text-secondary); line-height: 1.45; }
+.reaction-enthalpy details summary { color: var(--accent); cursor: pointer; }
+.reaction-enthalpy ul { display: grid; gap: .25rem; margin: .35rem 0 0; padding: 0; list-style: none; }
+.reaction-enthalpy li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .15rem .65rem; padding-top: .25rem; border-top: 1px solid var(--border); }
+.reaction-enthalpy li strong { color: var(--text-primary); font-weight: 650; }
+.reaction-enthalpy li small { grid-column: 1 / -1; color: var(--text-muted); overflow-wrap: anywhere; }
 .reaction-learning-detail { display: flex; flex-wrap: wrap; align-items: start; gap: .35rem .75rem; }
 .reaction-learning-item,
 .reaction-related-species,
@@ -401,6 +412,8 @@
   .draft-participant > span { display: none; }
   .manual-equation-input { align-items: stretch; }
   .manual-equation-input > button { align-self: end; }
+  .reaction-enthalpy li { grid-template-columns: 1fr; }
+  .reaction-enthalpy li small { grid-column: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
